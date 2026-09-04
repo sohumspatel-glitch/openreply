@@ -28,7 +28,12 @@ import {
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import { matchKeywords } from "@/lib/utils/keyword-matcher";
-import { reserveDMSlot } from "@/lib/utils/rate-limiter";
+import {
+  reserveCommentReplySlot,
+  reserveDMSlot,
+  sendCooldownRemaining,
+  startSendCooldown,
+} from "@/lib/utils/rate-limiter";
 import {
   releaseWorkspaceDMReservation,
   reserveWorkspaceDMSend,
@@ -381,6 +386,14 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       !existingLog?.publicReplySentAt
     ) {
       try {
+        // Commenting is policed at least as hard as messaging, and this path
+        // had no budget at all. Losing a public reply costs little; losing the
+        // account to an action block costs everything.
+        if (!(await reserveCommentReplySlot(instagramAccountId))) {
+          throw new Error(
+            "Public reply skipped: hourly comment budget reached for this account"
+          );
+        }
         const chosen = replyPool[Math.floor(Math.random() * replyPool.length)];
         const publicReply = renderMessageWithTracking({
           message: chosen,
@@ -919,10 +932,19 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
     },
   });
 
+  // A card is a complete follow-up on its own: its title carries the copy and
+  // its button carries the link, so the plain-text body is optional. Requiring
+  // the text here meant a campaign configured as a card and nothing else went
+  // silently undelivered.
+  const cardDestination =
+    automation?.trackedLinks[0]?.slug ?? automation?.followUpLinkUrl?.trim();
+  const hasCard = Boolean(automation?.followUpCardTitle?.trim() && cardDestination);
+  const hasText = Boolean(automation?.followUpMessage?.trim());
+
   if (
     !automation ||
     !automation.followUpEnabled ||
-    !automation.followUpMessage?.trim() ||
+    (!hasText && !hasCard) ||
     automation.instagramAccount.instagramId !== instagramAccountId ||
     !automation.instagramAccount.accessToken
   ) {
@@ -936,8 +958,9 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
     return;
   }
 
+  // May be empty now that a card alone is a valid follow-up.
   const bodyText = renderMessageWithoutLink({
-    message: automation.followUpMessage,
+    message: automation.followUpMessage ?? "",
     commenterName: commenterName ?? null,
   });
 
@@ -1252,7 +1275,55 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   }
 }
 
+/**
+ * Meta reported an action block, so stop touching the API for a while.
+ *
+ * Retrying into a block is what turns a short cooldown into a long one, and
+ * BullMQ would otherwise keep every other queued job firing at the same
+ * account while it is shut.
+ */
+async function haltOnActionBlock(
+  error: unknown,
+  instagramAccountId: string | undefined
+): Promise<void> {
+  if (!instagramAccountId) return;
+  const blocked =
+    error instanceof RateLimitError ||
+    (error instanceof MetaApiError && error.code === 368);
+  if (!blocked) return;
+  await startSendCooldown(instagramAccountId);
+  console.warn(
+    `[DM Worker] Action block from Meta; pausing sends for ${instagramAccountId}`
+  );
+}
+
+function accountIdOf(job: Job<DmQueueJob>): string | undefined {
+  const data = job.data as { instagramAccountId?: string };
+  return data.instagramAccountId;
+}
+
 async function processJob(job: Job<DmQueueJob>): Promise<void> {
+  // One gate for every job type. A blocked account does no work at all rather
+  // than discovering the block one failed send at a time.
+  const accountId = accountIdOf(job);
+  if (accountId) {
+    const cooling = await sendCooldownRemaining(accountId);
+    if (cooling > 0) {
+      throw new RateLimitError(
+        `Sends paused for ${Math.ceil(cooling / 60)} more minute(s) after an Instagram action block`
+      );
+    }
+  }
+
+  try {
+    return await runJob(job);
+  } catch (error) {
+    await haltOnActionBlock(error, accountId);
+    throw error;
+  }
+}
+
+async function runJob(job: Job<DmQueueJob>): Promise<void> {
   if (job.name === POSTBACK_JOB_NAME) {
     return processPostback(job as Job<ProcessPostbackJob>);
   }

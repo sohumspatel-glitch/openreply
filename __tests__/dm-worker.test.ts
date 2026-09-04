@@ -12,6 +12,9 @@ const {
   mockDecryptToken,
   mockMatchKeywords,
   mockReserveDMSlot,
+  mockSendCooldownRemaining,
+  mockStartSendCooldown,
+  mockReserveCommentReplySlot,
   mockQueueAdd,
   mockReserveWorkspaceDMSend,
   mockReleaseWorkspaceDMReservation,
@@ -45,6 +48,9 @@ const {
   mockDecryptToken: vi.fn(),
   mockMatchKeywords: vi.fn(),
   mockReserveDMSlot: vi.fn(),
+  mockSendCooldownRemaining: vi.fn(),
+  mockStartSendCooldown: vi.fn(),
+  mockReserveCommentReplySlot: vi.fn(),
   mockQueueAdd: vi.fn(),
   mockReserveWorkspaceDMSend: vi.fn(),
   mockReleaseWorkspaceDMReservation: vi.fn(),
@@ -94,6 +100,11 @@ vi.mock("@/lib/utils/keyword-matcher", () => ({
 
 vi.mock("@/lib/utils/rate-limiter", () => ({
   reserveDMSlot: mockReserveDMSlot,
+  // Default to a clear account with budget available; the action-block tests
+  // override these per case.
+  sendCooldownRemaining: mockSendCooldownRemaining,
+  startSendCooldown: mockStartSendCooldown,
+  reserveCommentReplySlot: mockReserveCommentReplySlot,
 }));
 
 vi.mock("@/lib/billing/usage", () => ({
@@ -238,6 +249,11 @@ beforeEach(() => {
     limit: 2000,
     periodStart: usagePeriodStart,
   });
+  // Default: the account is clear and has comment budget. The action-block
+  // path is exercised separately.
+  mockSendCooldownRemaining.mockResolvedValue(0);
+  mockStartSendCooldown.mockResolvedValue(undefined);
+  mockReserveCommentReplySlot.mockResolvedValue(true);
   mockReserveDMSlot.mockResolvedValue({
     allowed: true,
     currentCount: 11,
@@ -1117,5 +1133,57 @@ describe("DM Worker — DM keyword trigger", () => {
         create: expect.objectContaining({ status: "FAILED" }),
       })
     );
+  });
+});
+
+describe("DM Worker — Instagram action blocks (error 368)", () => {
+  it("does no work at all while the account is cooling down", async () => {
+    // The point of the cooldown is that a blocked account stops TOUCHING the
+    // API. Failing one send at a time is what deepens a block.
+    const meta = await import("@/lib/meta/client");
+    mockSendCooldownRemaining.mockResolvedValue(600);
+    const processor = getProcessor();
+
+    await expect(processor(createMockJob())).rejects.toThrow(/Sends paused/);
+
+    expect(mockSendPrivateReply).not.toHaveBeenCalled();
+    expect(vi.mocked(meta.sendCommentReply)).not.toHaveBeenCalled();
+    expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+  });
+
+  it("starts a cooldown when Meta reports an action block", async () => {
+    const meta = await import("@/lib/meta/client");
+    mockSendCooldownRemaining.mockResolvedValue(0);
+    mockSendPrivateReply.mockRejectedValue(
+      new meta.RateLimitError(
+        "We limit how often you can post, comment or do other things"
+      )
+    );
+    const processor = getProcessor();
+
+    await expect(processor(createMockJob())).rejects.toThrow();
+    expect(mockStartSendCooldown).toHaveBeenCalledWith("ig_456");
+  });
+
+  it("leaves the cooldown alone for ordinary failures", async () => {
+    mockSendCooldownRemaining.mockResolvedValue(0);
+    mockSendPrivateReply.mockRejectedValue(new Error("network blip"));
+    const processor = getProcessor();
+
+    await expect(processor(createMockJob())).rejects.toThrow();
+    expect(mockStartSendCooldown).not.toHaveBeenCalled();
+  });
+
+  it("skips the public reply once the hourly comment budget is spent", async () => {
+    const meta = await import("@/lib/meta/client");
+    mockSendCooldownRemaining.mockResolvedValue(0);
+    mockReserveCommentReplySlot.mockResolvedValue(false);
+    const processor = getProcessor();
+
+    await processor(createMockJob());
+
+    // The DM is the valuable half and still goes out.
+    expect(vi.mocked(meta.sendCommentReply)).not.toHaveBeenCalled();
+    expect(mockSendPrivateReply).toHaveBeenCalled();
   });
 });

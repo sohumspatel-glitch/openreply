@@ -222,5 +222,68 @@ export async function resetRateLimit(
   await client.del(key);
 }
 
+/**
+ * Meta's action block (error 368) is a BEHAVIOURAL limit, and it fires far
+ * below the documented 750/hour: this account was blocked on a day it sent
+ * fewer than twenty messages. The documented cap therefore protects nothing on
+ * its own.
+ *
+ * What makes an action block worse is continuing to call the API during it.
+ * When any send comes back 368 the whole account goes quiet for a cooling
+ * period, so the other queued jobs stop hammering a door Meta has already shut.
+ *
+ * Thirty minutes is chosen to sit inside the worker's retry ladder (5 / 15 /
+ * 45 minutes), so a job parked at the start of a cooldown gets a real attempt
+ * on the other side of it rather than exhausting its retries while blocked.
+ */
+const SEND_COOLDOWN_SEC = 30 * 60;
+
+const cooldownKey = (instagramAccountId: string) =>
+  `rate:cooldown:${instagramAccountId}`;
+
+/** Stop every send for this account after Meta reported an action block. */
+export async function startSendCooldown(
+  instagramAccountId: string,
+  seconds: number = SEND_COOLDOWN_SEC
+): Promise<void> {
+  await getRedis().set(cooldownKey(instagramAccountId), "1", "EX", seconds);
+}
+
+/** Seconds left on the cooldown, or 0 when sending is allowed. */
+export async function sendCooldownRemaining(
+  instagramAccountId: string
+): Promise<number> {
+  const ttl = await getRedis().ttl(cooldownKey(instagramAccountId));
+  return ttl > 0 ? ttl : 0;
+}
+
+/**
+ * Public comment replies had no limiter at all, while DMs had one. Instagram
+ * polices commenting at least as hard as messaging — the block message is
+ * literally "how often you can post, comment or do other things" — so this
+ * caps them well under anything Meta would consider bursty. A reply that
+ * cannot get a slot is skipped rather than queued: the DM is the part that
+ * matters, and a late public reply under someone's comment is worth little.
+ */
+const COMMENT_REPLY_MAX = 20;
+const COMMENT_REPLY_WINDOW = 3600;
+
+export async function reserveCommentReplySlot(
+  instagramAccountId: string
+): Promise<boolean> {
+  const client = getRedis();
+  const key = `rate:comment:${instagramAccountId}`;
+  const count = await client.incr(key);
+  if (count === 1) await client.expire(key, COMMENT_REPLY_WINDOW);
+  return count <= COMMENT_REPLY_MAX;
+}
+
 // Export constants for use in tests
-export { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, REQUEUE_DELAY_MS, MAX_REQUEUE_ATTEMPTS };
+export {
+  RATE_LIMIT_MAX,
+  RATE_LIMIT_WINDOW,
+  REQUEUE_DELAY_MS,
+  MAX_REQUEUE_ATTEMPTS,
+  SEND_COOLDOWN_SEC,
+  COMMENT_REPLY_MAX,
+};
