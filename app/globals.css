@@ -1,90 +1,287 @@
+/* Inter + DM Sans.
+   The Next 16 way is next/font/google in app/layout.tsx, which puts the woff2
+   on our own origin and generates a size-adjusted fallback. layout.tsx is not
+   part of this change, so the faces are pulled from Google here instead, and
+   the type tokens below are written so that wiring next/font up later is a
+   one-line edit in layout.tsx with nothing to change in this file.
+   @import must be the first rule in a sheet, hence the position above the
+   Tailwind import. 400..900 covers font-medium through font-black, all of
+   which the app uses. */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..900&family=Inter:wght@400..900&display=swap");
 @import "tailwindcss";
 
-/* ManyChat Alternative — Design System
-   Plain and functional. No gradients, glass, glow, or animation. */
+/* Startscalr — "warm precision"
+   Ported from the marketing design system. Warm neutral surfaces, one copper
+   accent, 1px lines, quiet broad shadows, glass reserved for chrome.
+   Everything downstream is a token: no component should carry a raw hex. */
 
-@theme inline {
-  --color-background: #ffffff;
-  --color-foreground: #18181b;
-  --color-surface: #f7f7f8;
-  --color-surface-hover: #efeff1;
-  --color-border: #e4e4e7;
-  --color-border-hover: #d4d4d8;
-  --color-muted: #71717a;
-  --color-accent: #f97316;
-  --color-accent-hover: #ea580c;
-  --color-success: #16a34a;
-  --color-error: #dc2626;
-  --color-warning: #d97706;
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, monospace;
+/* `static` matters: without it Tailwind only emits the theme variables some
+   generated utility happens to use, so a token nothing has styled with yet —
+   --color-tan, --shadow-card, --ease-expressive — never reaches :root and a
+   hand-written var(--color-tan) (recharts stroke props, an inline style)
+   silently resolves to nothing. `inline` keeps utilities on literal values. */
+@theme static inline {
+  /* Surfaces — warm, not beige. The canvas is a hair off white so a pure white
+     card reads as raised without needing a heavy shadow to say so. */
+  --color-background: #fcfbf9;
+  --color-surface: #ffffff;
+  --color-surface-warm: #f5f2ed;
+  --color-surface-sand: #ede8e0;
+  --color-surface-field: #f8f6f2;
+  --color-ink: #111418;
+  --color-ink-raised: #1b222c;
+  --color-ink-hover: #232c38;
+
+  /* Text. Ratios are measured on white (#ffffff), the brightest surface in the
+     palette and therefore the worst case — each also clears on the canvas. */
+  --color-foreground: #111418; /* 21.0:1 — headings + body */
+  --color-foreground-soft: #39414d; /* 10.3:1 — secondary copy */
+  --color-muted: #5a616b; /*  6.3:1 — clarifiers, metadata */
+  --color-faint: #5f6672; /*  5.8:1 — small labels */
+  --color-on-ink: #f7f4f0; /* 17.0:1 on --color-ink */
+  --color-on-ink-soft: #c3c8cf; /* 11.0:1 on --color-ink */
+  --color-on-ink-mute: #9aa1ab; /*  7.1:1 on --color-ink */
+
+  /* Lines — 1px, low contrast, no exceptions. A border you notice as a border
+     is already too dark for this system. */
+  --color-border: #e5dfd6;
+  --color-border-soft: #ede8e0;
+  --color-border-firm: #d7cfc3;
+  --color-border-invert: #2a323d;
+
+  /* Copper signal — the only accent.
+     --color-accent is 3.8:1 on white, which clears the 3:1 bar for graphics and
+     for text at 24px+, and fails the 4.5:1 bar for anything smaller. So: fills,
+     rules, icons and large figures. Body-size text uses --color-accent-text. */
+  --color-accent: #b87333;
+  --color-accent-text: #8f5520; /* 6.0:1 — the text-safe copper */
+  --color-accent-hover: #9e6229;
+  /* Copper that CARRIES TEXT. Ivory on brand copper is only 3.46:1, so a copper
+     button with ivory text fails AA outright. The marketing system solves this
+     with a deeper ramp rather than by giving up the copper CTA: ivory clears
+     5.12:1 here and 7.84:1 on the hover step, so the button gets more legible
+     as you interact with it, not less. Use these for any filled control with a
+     label on it; --color-accent stays for fills, rules, icons and big figures. */
+  --color-accent-fill: #96591c;
+  --color-accent-fill-hover: #6f4117;
+  --color-accent-tint: #faf2e8;
+  --color-accent-rim: #e9d3b6;
+  --color-tan: #d4a574; /* 8.3:1 on ink — accent ON INK only, never on canvas */
+
+  /* Status. Never the only signal: always paired with a word. */
+  --color-success: #2f6a3f;
+  --color-error: #a9331f;
+  --color-error-tint: #fdf1ee;
+  --color-warning: #8f5520;
+
+  /* Glass. See the .glass rules below for where these are allowed. */
+  --color-glass: rgba(255, 255, 255, 0.72);
+  --color-glass-strong: rgba(255, 255, 255, 0.86);
+  --color-glass-rim: rgba(255, 255, 255, 0.6);
+  --color-glass-ink: rgba(17, 20, 24, 0.72);
+  --color-glass-ink-strong: rgba(17, 20, 24, 0.86);
+  --blur-glass: 18px;
+
+  /* Radii — one dominant radius per component. Nesting three different corner
+     sizes inside one card is what makes an interface look improvised. */
+  --radius-control: 0.375rem;
+  --radius-chip: 0.5rem;
+  --radius-btn: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-card: 1.25rem;
+  --radius-media: 1.5rem;
+  --radius-stage: 1.75rem;
+  --radius-pill: 9999px;
+
+  /* Depth — broad and quiet. No alpha above .24, and the blur radius always far
+     exceeds the offset, so the shadow reads as ambient light rather than as an
+     object dropped on top of the page. */
+  --shadow-hair: 0 1px 2px rgba(17, 20, 24, 0.05);
+  --shadow-lift: 0 2px 6px rgba(17, 20, 24, 0.05), 0 1px 2px rgba(17, 20, 24, 0.04);
+  --shadow-panel: 0 8px 24px -8px rgba(17, 20, 24, 0.08);
+  --shadow-card: 0 16px 40px -16px rgba(17, 20, 24, 0.14);
+  --shadow-media: 0 32px 64px -28px rgba(17, 20, 24, 0.24);
+  --shadow-glass: 0 1px 2px rgba(17, 20, 24, 0.04), 0 8px 24px -12px rgba(17, 20, 24, 0.1);
+
+  /* Motion. --ease-standard for state changes; --ease-expressive for anything
+     that enters or grows — it covers most of the distance early and settles. */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-expressive: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Type. The var() indirection is the next/font hand-off: the moment
+     app/layout.tsx defines --font-inter / --font-dm-sans via next/font, those
+     win with no edit here; until then the @import at the top supplies the same
+     faces and the literal family name resolves. The tail of each stack is the
+     system fallback that renders while the webfont is in flight. */
+  --font-sans: var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --font-title: var(--font-dm-sans, "DM Sans"), var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
+
+  /* Deprecated — do NOT use in new code; use --color-surface-warm and
+     --color-border-firm. These two names survive only because a dozen screens
+     outside this restyle still say hover:bg-surface-hover and
+     hover:border-border-hover, and removing the tokens would silently delete
+     their hover states rather than fail a build. Delete once those are ported. */
+  --color-surface-hover: #f5f2ed;
+  --color-border-hover: #d7cfc3;
 }
 
-html {
-  color-scheme: light;
-}
+@layer base {
+  /* The palette is light-only and no dark variant is declared, so pin the
+     scheme: it keeps native controls, scrollbars and form widgets light even
+     when the OS is in dark mode. */
+  html {
+    color-scheme: light;
+  }
 
-body {
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-sans);
-}
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
 
-/* Focus ring — visible, for keyboard users. */
-:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
+  ::selection {
+    background: var(--color-accent-tint);
+    color: var(--color-accent-text);
+  }
 
-/* Form fields already have a border, so keep the focus ring hugging the
-   field instead of bleeding up toward the label above it. */
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline-offset: 1px;
-}
+  /* Focus ring — visible, for keyboard users. Never remove it. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 
-/* iOS Safari zooms the whole page in when a focused field's text is under 16px,
-   and never zooms back out. Fields are text-sm (14px) throughout, so raise them
-   to 16px on phones and leave the desktop sizing alone. */
-@media (max-width: 640px) {
-  input,
-  textarea,
-  select {
-    font-size: 16px;
+  /* Form fields already have a border, so keep the focus ring hugging the
+     field instead of bleeding up toward the label above it. */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline-offset: 1px;
+  }
+
+  /* iOS Safari zooms the whole page in when a focused field's text is under 16px,
+     and never zooms back out. Fields are text-sm (14px) throughout, so raise them
+     to 16px on phones and leave the desktop sizing alone. */
+  @media (max-width: 640px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
   }
 }
 
-/* Panel — flat container. Replaces .glass / .glass-strong. */
-.panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+/* Component classes sit in the components layer so a utility on the same
+   element still wins: `panel rounded-panel` has to be able to override the card
+   radius, and unlayered CSS would outrank the utility instead. */
+@layer components {
+  /* Opaque raised card — the default container of this system. */
+  .panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-lift);
+  }
+
+  /* GLASS IS FOR CHROME ONLY: a sticky header, the sidebar rail, a modal
+     backdrop, a hover overlay on one piece of media. A backdrop-filter is
+     re-composited every frame the element is on screen, so one on a repeating
+     grid card costs a viewport blur per card on every scroll frame. Cards stay
+     opaque — that is what .panel is for. */
+  .glass {
+    background: var(--color-glass);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.4);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.4);
+    border: 1px solid var(--color-glass-rim);
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Same surface, more opaque: for chrome that carries body text, where 0.72
+     lets through enough of the scrolling content to eat into contrast. */
+  .glass-strong {
+    background: var(--color-glass-strong);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.4);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.4);
+    border: 1px solid var(--color-glass-rim);
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Over ink, or over media. The rim flips to the invert line — a white
+     hairline on a dark translucent panel reads as a glow, not as an edge — and
+     the shadow is dropped, since dark-on-dark depth only muddies the blur. */
+  .glass-ink {
+    background: var(--color-glass-ink);
+    color: var(--color-on-ink);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.2);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.2);
+    border: 1px solid var(--color-border-invert);
+  }
+
+  /* The same ink chrome WITHOUT a backdrop-filter, for anything that repeats.
+     A blur is composited every frame it is on screen, so one per grid card —
+     the post grid goes up to 500 — is a real cost. Over a photographic
+     thumbnail at 0.86 alpha you cannot see through the scrim anyway, so this
+     is visually equivalent and free. Keep .glass-ink for one-off chrome. */
+  .scrim-ink {
+    background: var(--color-glass-ink-strong);
+    color: var(--color-on-ink);
+  }
+
+  .glass-ink-strong {
+    background: var(--color-glass-ink-strong);
+    color: var(--color-on-ink);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.2);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.2);
+    border: 1px solid var(--color-border-invert);
+  }
+
+  /* Without the blur, translucency is just low contrast over unknown content,
+     so fall back to the solid surface rather than to a tint. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass,
+    .glass-strong {
+      background: var(--color-surface);
+      border-color: var(--color-border);
+    }
+
+    .glass-ink,
+    .glass-ink-strong {
+      background: var(--color-ink);
+    }
+  }
+
+  /* For a control inside an overflow-hidden or heavily rounded parent, where
+     the global outline gets clipped or floats away from the corner. Drawn as
+     two box-shadow rings — a canvas-coloured spacer, then the copper — so the
+     ring is painted inside the element's own box. */
+  .focus-ring:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-background),
+      0 0 0 4px var(--color-accent);
+  }
+
+  /* Forced-colors mode drops box-shadow entirely, so hand the ring back to the
+     outline there rather than leaving those users with no focus indicator. */
+  @media (forced-colors: active) {
+    .focus-ring:focus-visible {
+      outline: 2px solid;
+      outline-offset: 2px;
+    }
+  }
 }
 
-/* Kept as no-op aliases so existing markup degrades to plain surfaces
-   instead of breaking. Prefer .panel in new code. */
-.glass,
-.glass-strong {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-}
-
-.gradient-mesh {
-  background: none;
-}
-
-.animate-fade-in,
-.animate-slide-in,
-.animate-pulse-glow,
-.stagger > * {
-  animation: none;
-}
-
+/* Unlayered on purpose: this has to outrank everything, utilities included. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+
+  /* Static transforms are deliberately left alone: -translate-x-1/2 and friends
+     are layout, not motion, and zeroing them would decentre half the app.
+     Killing the transition above is what actually removes the movement. */
 }

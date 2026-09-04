@@ -1,7 +1,9 @@
 /**
  * Stat Card
  *
- * Metric panel with label, value, and optional trend.
+ * Metric panel with label, value, and optional trend. These repeat in a grid,
+ * so the surface is opaque — a backdrop-filter here would composite on every
+ * frame the grid is on screen.
  */
 
 interface StatCardProps {
@@ -13,11 +15,18 @@ interface StatCardProps {
 
 export default function StatCard({ label, value, trend, trendUp }: StatCardProps) {
   return (
-    <div className="panel rounded p-4">
-      <p className="text-sm text-muted">{label}</p>
-      <p className="text-2xl font-semibold text-foreground mt-1">{value}</p>
+    <div className="rounded-card border border-border bg-surface p-4 shadow-hair sm:p-5">
+      <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-faint">
+        {label}
+      </p>
+      {/* Tabular figures keep the numbers from shifting as a tile refreshes. */}
+      <p className="mt-2 font-title text-[1.75rem] font-semibold leading-none tracking-[-0.02em] text-foreground tabular-nums">
+        {value}
+      </p>
       {trend && (
-        <p className={`text-xs mt-1 ${trendUp ? "text-success" : "text-error"}`}>
+        <p
+          className={`mt-2 text-xs font-medium ${trendUp ? "text-success" : "text-error"}`}
+        >
           {trendUp ? "Up" : "Down"} {trend}
         </p>
       )}

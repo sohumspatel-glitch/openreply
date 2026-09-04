@@ -40,6 +40,15 @@ const createAutomationSchema = z
     // Minutes to wait before the follow-up. Capped at 24h so it stays inside
     // Instagram's messaging window.
     followUpDelayMinutes: z.number().int().min(0).max(1440).optional().default(0),
+    // Optional rich card for the follow-up: Meta's generic template, which
+    // renders an image, a title, a subtitle and one tappable button. Leave
+    // followUpLinkUrl empty to keep the follow-up as plain text.
+    followUpLinkUrl: z.string().url().or(z.literal("")).optional().nullable(),
+    followUpButtonLabel: z.string().max(20).optional().nullable(),
+    followUpCardTitle: z.string().max(80).optional().nullable(),
+    followUpCardSubtitle: z.string().max(80).optional().nullable(),
+    followUpImageUrl: z.string().url().or(z.literal("")).optional().nullable(),
+    followUpImageAspect: z.enum(["horizontal", "square"]).optional().nullable(),
     publicReplyEnabled: z.boolean().optional().default(false),
     publicReplyMessage: z.string().max(1000).optional().nullable(),
     publicReplyMessages: z
@@ -101,6 +110,12 @@ const updateAutomationSchema = z.object({
   followUpEnabled: z.boolean().optional(),
   followUpMessage: z.string().max(1000).optional().nullable(),
   followUpDelayMinutes: z.number().int().min(0).max(1440).optional(),
+  followUpLinkUrl: z.string().url().or(z.literal("")).optional().nullable(),
+  followUpButtonLabel: z.string().max(20).optional().nullable(),
+  followUpCardTitle: z.string().max(80).optional().nullable(),
+  followUpCardSubtitle: z.string().max(80).optional().nullable(),
+  followUpImageUrl: z.string().url().or(z.literal("")).optional().nullable(),
+  followUpImageAspect: z.enum(["horizontal", "square"]).optional().nullable(),
   publicReplyEnabled: z.boolean().optional(),
   publicReplyMessage: z.string().max(1000).optional().nullable(),
   publicReplyMessages: z.array(z.string().max(1000)).max(10).optional(),
@@ -120,6 +135,12 @@ const updateAutomationSchema = z.object({
     .nullable(),
   secondaryButtonLabel: z.string().max(20).optional().nullable(),
 });
+
+// TrackedLink.purpose values. Reveal-side reads and the primary/secondary
+// sync below are all scoped to REVEAL so the follow-up's link never shifts the
+// [0] / [1] indexes the campaign form relies on.
+const REVEAL_LINK = "REVEAL";
+const FOLLOWUP_LINK = "FOLLOWUP";
 
 export async function GET(request: NextRequest) {
   const workspaceId = await getCurrentWorkspaceId();
@@ -146,6 +167,7 @@ export async function GET(request: NextRequest) {
         select: { dmLogs: true },
       },
       trackedLinks: {
+        where: { purpose: REVEAL_LINK },
         select: {
           id: true,
           slug: true,
@@ -351,6 +373,7 @@ export async function POST(request: NextRequest) {
     slug: string;
     label: string;
     destinationUrl: string;
+    purpose: string;
   }[] = [];
   if (trackedDestinationUrl) {
     linkCreates.push({
@@ -358,6 +381,7 @@ export async function POST(request: NextRequest) {
       slug: generateTrackedLinkSlug(),
       label: "Primary campaign link",
       destinationUrl: trackedDestinationUrl,
+      purpose: REVEAL_LINK,
     });
   }
   if (secondaryDestinationUrl) {
@@ -366,6 +390,18 @@ export async function POST(request: NextRequest) {
       slug: generateTrackedLinkSlug(),
       label: secondaryButtonLabel?.trim() || "Open link",
       destinationUrl: secondaryDestinationUrl,
+      purpose: REVEAL_LINK,
+    });
+  }
+  // The follow-up card's link is tracked too, but tagged so it stays out of
+  // the reveal message's buttons.
+  if (parsed.data.followUpEnabled && parsed.data.followUpLinkUrl) {
+    linkCreates.push({
+      workspaceId,
+      slug: generateTrackedLinkSlug(),
+      label: parsed.data.followUpButtonLabel?.trim() || "Follow-up link",
+      destinationUrl: parsed.data.followUpLinkUrl,
+      purpose: FOLLOWUP_LINK,
     });
   }
 
@@ -418,6 +454,24 @@ export async function POST(request: NextRequest) {
       followUpDelayMinutes: parsed.data.followUpEnabled
         ? parsed.data.followUpDelayMinutes
         : 0,
+      followUpLinkUrl: parsed.data.followUpEnabled
+        ? parsed.data.followUpLinkUrl || null
+        : null,
+      followUpButtonLabel: parsed.data.followUpEnabled
+        ? parsed.data.followUpButtonLabel || null
+        : null,
+      followUpCardTitle: parsed.data.followUpEnabled
+        ? parsed.data.followUpCardTitle || null
+        : null,
+      followUpCardSubtitle: parsed.data.followUpEnabled
+        ? parsed.data.followUpCardSubtitle || null
+        : null,
+      followUpImageUrl: parsed.data.followUpEnabled
+        ? parsed.data.followUpImageUrl || null
+        : null,
+      followUpImageAspect: parsed.data.followUpEnabled
+        ? parsed.data.followUpImageAspect || null
+        : null,
       publicReplyEnabled: parsed.data.publicReplyEnabled,
       publicReplyMessages: parsed.data.publicReplyEnabled
         ? publicReplyList
@@ -517,6 +571,12 @@ export async function PATCH(request: NextRequest) {
   if (automationData.followUpEnabled === false) {
     automationData.followUpMessage = null;
     automationData.followUpDelayMinutes = 0;
+    automationData.followUpLinkUrl = null;
+    automationData.followUpButtonLabel = null;
+    automationData.followUpCardTitle = null;
+    automationData.followUpCardSubtitle = null;
+    automationData.followUpImageUrl = null;
+    automationData.followUpImageAspect = null;
   }
   // Any-post / next-reel campaigns carry no specific post.
   if (automationData.matchAnyPost === true || automationData.pendingNextReel === true) {
@@ -545,7 +605,7 @@ export async function PATCH(request: NextRequest) {
   // destination URL was supplied. `undefined` means "leave it alone".
   if (trackedDestinationUrl !== undefined && trackedDestinationUrl !== null) {
     const primaryLink = await prisma.trackedLink.findFirst({
-      where: { automationId },
+      where: { automationId, purpose: REVEAL_LINK },
       orderBy: { createdAt: "asc" },
     });
 
@@ -566,6 +626,7 @@ export async function PATCH(request: NextRequest) {
           slug: generateTrackedLinkSlug(),
           label: "Primary campaign link",
           destinationUrl: trackedDestinationUrl,
+          purpose: REVEAL_LINK,
         },
       });
     }
@@ -576,7 +637,7 @@ export async function PATCH(request: NextRequest) {
   // second button's title.
   if (secondaryDestinationUrl !== undefined && secondaryDestinationUrl !== null) {
     const links = await prisma.trackedLink.findMany({
-      where: { automationId },
+      where: { automationId, purpose: REVEAL_LINK },
       orderBy: { createdAt: "asc" },
     });
     const secondaryLink = links[1];
@@ -599,6 +660,43 @@ export async function PATCH(request: NextRequest) {
           slug: generateTrackedLinkSlug(),
           label: secondaryLabel,
           destinationUrl: secondaryDestinationUrl,
+          purpose: REVEAL_LINK,
+        },
+      });
+    }
+  }
+
+  // Keep the follow-up card's tracked link in step with its URL. Turning the
+  // follow-up off, or clearing the URL, removes the link so no stale
+  // destination survives.
+  const followUpUrl = automationData.followUpLinkUrl;
+  if (followUpUrl !== undefined) {
+    const existing = await prisma.trackedLink.findFirst({
+      where: { automationId, purpose: FOLLOWUP_LINK },
+      orderBy: { createdAt: "asc" },
+    });
+    const followUpLabel =
+      (automationData.followUpButtonLabel as string | null)?.trim() ||
+      "Follow-up link";
+
+    if (!followUpUrl) {
+      if (existing) {
+        await prisma.trackedLink.delete({ where: { id: existing.id } });
+      }
+    } else if (existing) {
+      await prisma.trackedLink.update({
+        where: { id: existing.id },
+        data: { destinationUrl: followUpUrl, label: followUpLabel },
+      });
+    } else {
+      await prisma.trackedLink.create({
+        data: {
+          workspaceId,
+          automationId,
+          slug: generateTrackedLinkSlug(),
+          label: followUpLabel,
+          destinationUrl: followUpUrl,
+          purpose: FOLLOWUP_LINK,
         },
       });
     }

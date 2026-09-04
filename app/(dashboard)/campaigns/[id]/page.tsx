@@ -126,15 +126,15 @@ export default function CampaignDetailPage() {
   }
 
   if (loading) {
-    return <div className="panel h-64 rounded" />;
+    return <div className="panel h-64" />;
   }
   if (notFound || !campaign) {
     return (
-      <div className="panel rounded p-8 text-center">
+      <div className="panel p-8 text-center">
         <p className="text-sm text-muted">Campaign not found.</p>
         <button
           onClick={() => router.push("/campaigns")}
-          className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
+          className="mt-4 rounded-btn border border-border-firm px-4 py-2 text-sm text-muted hover:text-foreground"
         >
           Back to campaigns
         </button>
@@ -182,10 +182,10 @@ export default function CampaignDetailPage() {
         <div className="flex items-center gap-2">
           <h1 className="truncate text-lg font-semibold">{campaign.name}</h1>
           <span
-            className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${
+            className={`shrink-0 rounded-chip px-2 py-0.5 text-xs font-semibold ${
               campaign.isActive
                 ? "bg-success/10 text-success"
-                : "bg-zinc-500/10 text-muted"
+                : "bg-surface-warm text-muted"
             }`}
           >
             {campaign.isActive ? "LIVE" : "Paused"}
@@ -199,10 +199,10 @@ export default function CampaignDetailPage() {
               <img
                 src={postThumb}
                 alt="Post"
-                className="h-14 w-14 rounded object-cover"
+                className="h-14 w-14 rounded-chip object-cover"
               />
             ) : (
-              <div className="grid h-14 w-14 place-items-center rounded bg-surface-hover text-[10px] text-muted">
+              <div className="grid h-14 w-14 place-items-center rounded-chip bg-surface-sand text-[10px] text-muted">
                 {campaign.matchAnyPost || campaign.pendingNextReel ? "Any" : "Post"}
               </div>
             )}
@@ -265,7 +265,7 @@ export default function CampaignDetailPage() {
               ?.filter((link) => link.destinationUrl)
               .map((link, i) => (
                 <div key={i} className="space-y-1">
-                  <div className="rounded border border-border bg-surface px-3 py-2">
+                  <div className="rounded-control border border-border bg-surface-warm px-3 py-2">
                     <p className="select-all break-all font-mono text-xs text-foreground">
                       {link.trackedUrl ?? link.destinationUrl}
                     </p>
@@ -305,16 +305,16 @@ export default function CampaignDetailPage() {
           <div className="flex items-center gap-2">
             <Link
               href={`/campaigns/${campaign.id}/edit`}
-              className="rounded border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground"
+              className="rounded-btn border border-border-firm px-3 py-1.5 text-sm text-muted hover:text-foreground"
             >
               Edit
             </Link>
             <button
               onClick={toggleActive}
               disabled={busy}
-              className={`rounded border px-3 py-1.5 text-sm disabled:opacity-50 ${
+              className={`rounded-btn border px-3 py-1.5 text-sm disabled:opacity-50 ${
                 campaign.isActive
-                  ? "border-error/30 text-error hover:bg-error/10"
+                  ? "border-error/30 text-error hover:bg-error-tint"
                   : "border-success/30 text-success hover:bg-success/10"
               }`}
             >
@@ -326,7 +326,7 @@ export default function CampaignDetailPage() {
         {tab === "insights" && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {metrics.map((m) => (
-              <div key={m.label} className="panel rounded p-4">
+              <div key={m.label} className="panel p-4">
                 <p className="text-sm text-muted">{m.label}</p>
                 <p className="mt-1 text-2xl font-semibold text-foreground">
                   {m.value}
@@ -390,7 +390,7 @@ function Summary({ title, children }: { title: string; children: React.ReactNode
 
 function FieldBox({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded border border-border bg-surface px-3 py-2 text-sm text-foreground">
+    <div className="rounded-control border border-border bg-surface-warm px-3 py-2 text-sm text-foreground">
       {children}
     </div>
   );

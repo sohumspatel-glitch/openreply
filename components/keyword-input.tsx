@@ -42,11 +42,11 @@ export default function KeywordInput({ keywords, onChange, max = 10 }: KeywordIn
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2 p-3 rounded bg-surface border border-border min-h-[48px]">
+      <div className="flex flex-wrap gap-2 p-3 rounded-control bg-surface-field border border-border-firm min-h-[48px]">
         {keywords.map((keyword) => (
           <span
             key={keyword}
-            className="inline-flex items-center gap-2 px-2 py-1 rounded border border-border text-xs"
+            className="inline-flex items-center gap-2 px-2 py-1 rounded-chip border border-border-firm text-xs"
           >
             {keyword}
             <button
@@ -65,7 +65,7 @@ export default function KeywordInput({ keywords, onChange, max = 10 }: KeywordIn
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={keywords.length === 0 ? "Type keyword and press Enter..." : ""}
-          className="flex-1 min-w-[120px] bg-transparent text-sm text-foreground placeholder:text-zinc-500 outline-none"
+          className="flex-1 min-w-[120px] bg-transparent text-sm text-foreground placeholder:text-faint"
         />
       </div>
       <p className="text-xs text-muted">

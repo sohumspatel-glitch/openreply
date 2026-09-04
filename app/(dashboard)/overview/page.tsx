@@ -3,261 +3,370 @@
 /**
  * Instagram Overview Page
  *
- * Aggregate reach/engagement across your recent posts, plus a per-post table.
- * Views / reach / saved / shares come from Instagram media insights (requires
- * the insights permission); likes and comments are always available.
+ * The visual home of the app: every post the API returned, as a grid of cards
+ * that carry their own analytics, above range-wide totals and the follower
+ * trend. Views / reach / saved / shares come from Instagram media insights
+ * (requires the insights permission); likes and comments are always available.
+ *
+ * Sorting, filtering and search all run over the posts already in memory, so
+ * only the account and the range ever re-hit the API.
  */
 
 import { useEffect, useState } from "react";
-import AccountSelect from "@/components/account-select";
-import StatCard from "@/components/stat-card";
-import FollowerChart from "@/components/follower-chart";
-import type { OverviewResponse } from "@/app/api/instagram/overview/route";
+import PerformanceChart from "@/components/overview/performance-chart";
+import { formatCompact } from "@/components/overview/format";
+import OverviewHeader, { rangeLabel } from "@/components/overview/overview-header";
+import OverviewToolbar from "@/components/overview/overview-toolbar";
+import PostDetailPanel from "@/components/overview/post-detail-panel";
+import PostGrid, { PostGridSkeleton } from "@/components/overview/post-grid";
+import StatTile, { StatTileSkeleton } from "@/components/overview/stat-tile";
+import {
+  ALL_MEDIA_TYPES,
+  availabilityOf,
+  filterPosts,
+  mediaTypeFilters,
+  sortPosts,
+  type SortKey,
+} from "@/components/overview/post-analytics";
+import type {
+  OverviewPost,
+  OverviewResponse,
+} from "@/app/api/instagram/overview/route";
 
-function formatNumber(n: number | null): string {
-  if (n === null) return "—";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+const TILE_GRID = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4";
+
+interface Tile {
+  key: string;
+  label: string;
+  value: number;
+  /** Copper anchors the row on exactly one figure. */
+  accent?: boolean;
+  hint?: string;
 }
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-const COUNT_OPTIONS = [
-  { value: "25", label: "Last 25" },
-  { value: "50", label: "Last 50" },
-  { value: "100", label: "Last 100" },
-  { value: "all", label: "All time" },
-];
 
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState("all");
-  const [count, setCount] = useState("50");
+  const [range, setRange] = useState("30");
+  const [reloadNonce, setReloadNonce] = useState(0);
+
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [mediaType, setMediaType] = useState(ALL_MEDIA_TYPES);
+  const [query, setQuery] = useState("");
+  const [selectedPost, setSelectedPost] = useState<OverviewPost | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const params = new URLSearchParams();
     if (selectedAccountId !== "all") {
       params.set("instagramAccountId", selectedAccountId);
     }
-    params.set("count", count);
+    params.set("range", range);
+    // The grid is windowed by date now, so ask for the ceiling and let the
+    // server trim; a short range still costs few insight calls because it
+    // filters the media before fanning out.
+    params.set("count", "all");
 
-    fetch(`/api/instagram/overview?${params}`)
+    fetch(`/api/instagram/overview?${params}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((res) => {
         if (res.success) {
           setData(res.data);
           setError(null);
+          setSelectedPost(null);
         } else {
           setError(res.error ?? "Failed to load overview");
         }
       })
-      .catch(() => setError("Failed to load overview"))
-      .finally(() => setLoading(false));
-  }, [selectedAccountId, count]);
+      .catch((err: unknown) => {
+        // An aborted request was superseded, not failed — its replacement owns
+        // the loading state from here.
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError("Failed to load overview");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    // An all-time load can take most of a minute, so without this a slow first
+    // response would land on top of a fast second one.
+    return () => controller.abort();
+  }, [selectedAccountId, range, reloadNonce]);
+
+  const posts = data?.posts ?? [];
+  const availability = availabilityOf(posts);
+  const mediaTypes = mediaTypeFilters(posts);
+  // A type that was in the previous range may not be in this one; falling back
+  // to "all" beats silently filtering every post away.
+  const activeMediaType = mediaTypes.includes(mediaType)
+    ? mediaType
+    : ALL_MEDIA_TYPES;
+  const visiblePosts = sortPosts(
+    filterPosts(posts, { mediaType: activeMediaType, query }),
+    sort
+  );
+
+  const totals = data?.totals;
+  const tiles: Tile[] = totals
+    ? [
+        { key: "posts", label: "Posts", value: totals.posts, accent: true },
+        ...(availability.views
+          ? [
+              {
+                key: "views",
+                label: "Views",
+                value: totals.views,
+                hint: "Reels and videos only",
+              },
+            ]
+          : []),
+        ...(availability.insights
+          ? [{ key: "reach", label: "Reach", value: totals.reach }]
+          : []),
+        { key: "likes", label: "Likes", value: totals.likes },
+        { key: "comments", label: "Comments", value: totals.comments },
+        ...(availability.insights
+          ? [
+              { key: "saved", label: "Saved", value: totals.saved },
+              { key: "shares", label: "Shares", value: totals.shares },
+              {
+                key: "interactions",
+                label: "Interactions",
+                value: totals.interactions,
+                hint: "Likes, comments, saves, shares",
+              },
+            ]
+          : []),
+      ]
+    : [];
+
+  // The response flag alone is not enough to hide anything: it flips false when
+  // a single legacy post rejects one metric. Only say insights are missing when
+  // no post actually carries any.
+  const insightsMissing =
+    data !== null &&
+    !data.insightsAvailable &&
+    !availability.insights &&
+    posts.length > 0;
+
+  // Loading is raised by whatever triggered the reload rather than by the
+  // effect, which would otherwise set state during its own synchronous body.
+  // Instagram reports these only as a total for the window — there is no daily
+  // breakdown to chart, so they live as figures. A metric it does not return
+  // for this account is dropped rather than shown as a zero.
+  const accountTiles = (() => {
+    const w = data?.windowTotals;
+    if (!w) return [];
+    const defs: Array<{ key: string; label: string; value: number | null; hint: string }> = [
+      { key: "aViews", label: "Views", value: w.views, hint: "Account-wide" },
+      { key: "aLikes", label: "Likes", value: w.likes, hint: "Account-wide" },
+      { key: "aComments", label: "Comments", value: w.comments, hint: "Account-wide" },
+      { key: "aShares", label: "Shares", value: w.shares, hint: "Account-wide" },
+      { key: "aSaves", label: "Saves", value: w.saves, hint: "Account-wide" },
+      { key: "aInteractions", label: "Interactions", value: w.totalInteractions, hint: "Account-wide" },
+      { key: "aProfile", label: "Profile visits", value: w.profileViews, hint: "Account-wide" },
+      { key: "aEngaged", label: "Accounts engaged", value: w.accountsEngaged, hint: "Account-wide" },
+    ];
+    return defs.filter(
+      (d): d is { key: string; label: string; value: number; hint: string } =>
+        typeof d.value === "number"
+    );
+  })();
 
   function handleAccountChange(accountId: string) {
     setLoading(true);
     setSelectedAccountId(accountId);
   }
 
-  function handleCountChange(next: string) {
+  function handleRangeChange(next: string) {
     setLoading(true);
-    setCount(next);
+    setRange(next);
   }
 
-  if (loading) {
-    return (
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="panel rounded p-4 h-24 sm:p-5">
-            <div className="h-4 w-16 bg-zinc-200 rounded" />
-            <div className="mt-3 h-6 w-20 bg-zinc-200/60 rounded" />
-          </div>
-        ))}
-      </div>
-    );
+  function handleRetry() {
+    setLoading(true);
+    setError(null);
+    setReloadNonce((nonce) => nonce + 1);
   }
 
-  if (error) {
-    return (
-      <div className="panel rounded p-8 text-center">
-        <p className="text-sm text-error">{error}</p>
-        {error.includes("connect") && (
-          <a
-            href="/api/instagram/connect"
-            className="mt-4 inline-block text-sm text-accent hover:underline"
-          >
-            Connect Instagram
-          </a>
-        )}
-      </div>
-    );
+  function resetFilters() {
+    setMediaType(ALL_MEDIA_TYPES);
+    setQuery("");
   }
-
-  if (!data) return null;
-
-  const { totals, posts, accounts, insightsAvailable, followers, followerHistory } =
-    data;
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-foreground">Overview</h1>
-          <p className="text-sm text-muted mt-1">
-            {data.requestedCount === "all" ? "All-time" : "Recent"} —{" "}
-            {totals.posts} post{totals.posts === 1 ? "" : "s"} from @
-            {data.account.username}
-            {data.truncated ? ` (capped at ${totals.posts})` : ""}
-          </p>
-          {followers !== null && (
-            // Kept out of the tile row below: that row sums the selected posts,
-            // whereas this is a current account-level total.
-            <p className="mt-1 text-sm text-muted">
-              {followers.toLocaleString()} followers
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Range
-            </span>
-            <select
-              value={count}
-              onChange={(e) => handleCountChange(e.target.value)}
-              className="border-0 bg-transparent py-2 pr-1 text-sm text-foreground outline-none"
+      <OverviewHeader
+        data={data}
+        loading={loading}
+        selectedAccountId={selectedAccountId}
+        onAccountChange={handleAccountChange}
+        range={range}
+        onRangeChange={handleRangeChange}
+      />
+
+      {error ? (
+        <div className="rounded-panel border border-border bg-error-tint p-8 text-center">
+          <p className="text-sm font-medium text-error">{error}</p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="rounded-btn bg-ink px-4 py-2 text-sm font-medium text-on-ink motion-safe:transition-colors hover:bg-ink-hover"
             >
-              {COUNT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {accounts.length > 1 && (
-            <AccountSelect
-              accounts={accounts.map((a) => ({
-                id: a.id,
-                username: a.username,
-                instagramId: a.id,
-              }))}
-              value={selectedAccountId}
-              onChange={handleAccountChange}
-            />
-          )}
-        </div>
-      </div>
-
-      {!insightsAvailable && (
-        <div className="panel rounded p-4 border border-border">
-          <p className="text-sm text-foreground">
-            Views, reach, saved and shares need the insights permission.
-          </p>
-          <p className="text-sm text-muted mt-1">
-            Reconnect your account to grant it — likes and comments are shown in
-            the meantime.
-          </p>
-          <a
-            href="/api/instagram/connect"
-            className="mt-3 inline-block text-sm text-accent hover:underline"
-          >
-            Reconnect Instagram
-          </a>
-        </div>
-      )}
-
-      {/* Aggregate totals */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard label="Views" value={formatNumber(totals.views)} />
-        <StatCard label="Reach" value={formatNumber(totals.reach)} />
-        <StatCard label="Likes" value={formatNumber(totals.likes)} />
-        <StatCard label="Comments" value={formatNumber(totals.comments)} />
-        <StatCard label="Saved" value={formatNumber(totals.saved)} />
-        <StatCard label="Shares" value={formatNumber(totals.shares)} />
-      </div>
-
-      {/* Follower trend — account-level, independent of the post range */}
-      <FollowerChart data={followerHistory} followers={followers} />
-
-      {/* Per-post table */}
-      <div className="panel rounded p-4 sm:p-6">
-        <h2 className="text-sm font-semibold text-foreground mb-4">Posts</h2>
-        {posts.length === 0 ? (
-          <p className="text-sm text-muted py-8 text-center">No posts found</p>
-        ) : (
-          // Eight metric columns can't compress into a phone; let the table keep
-          // its natural width and scroll inside the panel instead.
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-zinc-500 border-b border-border">
-                  <th className="py-2 pr-4 font-medium">Post</th>
-                  <th className="py-2 px-3 font-medium text-right">Views</th>
-                  <th className="py-2 px-3 font-medium text-right">Reach</th>
-                  <th className="py-2 px-3 font-medium text-right">Likes</th>
-                  <th className="py-2 px-3 font-medium text-right">Comments</th>
-                  <th className="py-2 px-3 font-medium text-right">Saved</th>
-                  <th className="py-2 px-3 font-medium text-right">Shares</th>
-                  <th className="py-2 pl-3 font-medium text-right">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {posts.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-border last:border-0"
-                  >
-                    <td className="py-3 pr-4 max-w-xs">
-                      {p.permalink ? (
-                        <a
-                          href={p.permalink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-foreground hover:text-accent truncate block"
-                        >
-                          {p.caption || `${p.mediaType} post`}
-                        </a>
-                      ) : (
-                        <span className="text-foreground truncate block">
-                          {p.caption || `${p.mediaType} post`}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.views)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.reach)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.likes)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.comments)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.saved)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.shares)}
-                    </td>
-                    <td className="py-3 pl-3 text-right text-zinc-500">
-                      {formatDate(p.timestamp)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              Try again
+            </button>
+            {error.includes("connect") && (
+              <a
+                href="/api/instagram/connect"
+                className="text-sm font-medium text-accent-text underline-offset-4 hover:underline"
+              >
+                Connect Instagram
+              </a>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      ) : loading ? (
+        <>
+          <div className={TILE_GRID}>
+            {Array.from({ length: 8 }, (_, index) => (
+              <StatTileSkeleton key={index} />
+            ))}
+          </div>
+          <PostGridSkeleton />
+        </>
+      ) : data ? (
+        <>
+          {insightsMissing && (
+            <div className="rounded-panel border border-border bg-surface-warm p-4">
+              <p className="text-sm text-foreground">
+                Views, reach, saved and shares need the insights permission, so
+                they are hidden below.
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                Reconnect your account to grant it — likes and comments are
+                shown in the meantime.
+              </p>
+              <a
+                href="/api/instagram/connect"
+                className="mt-3 inline-block text-sm font-medium text-accent-text underline-offset-4 hover:underline"
+              >
+                Reconnect Instagram
+              </a>
+            </div>
+          )}
+
+          {/* Two different questions, so two rows rather than one blended set.
+              This row sums the POSTS in range: their lifetime performance. The
+              account row below counts activity that happened IN the window,
+              across everything including older posts, which is why the two
+              never agree and are never added together. */}
+          <p className="text-xs font-semibold uppercase tracking-wide text-faint">
+            Posts published in {rangeLabel(range)}
+          </p>
+          <div className={TILE_GRID}>
+            {tiles.map((tile) => (
+              <StatTile
+                key={tile.key}
+                label={tile.label}
+                value={formatCompact(tile.value)}
+                accent={tile.accent}
+                hint={tile.hint}
+              />
+            ))}
+          </div>
+
+          {accountTiles.length > 0 && (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-wide text-faint">
+                Account activity in {rangeLabel(range)}
+              </p>
+              <div className={TILE_GRID}>
+                {accountTiles.map((tile) => (
+                  <StatTile
+                    key={tile.key}
+                    label={tile.label}
+                    value={formatCompact(tile.value)}
+                    hint={tile.hint}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          <PerformanceChart
+            followerHistory={data.followerHistory}
+            reachHistory={data.reachHistory}
+            posts={data.posts}
+            followers={data.followers}
+            rangeLabel={rangeLabel(range)}
+          />
+
+          <section className="space-y-4">
+            <h2 className="font-title text-lg font-semibold tracking-tight text-foreground">
+              Posts
+            </h2>
+
+            {posts.length === 0 ? (
+              <div className="rounded-panel border border-border bg-surface p-10 text-center shadow-hair">
+                <p className="text-sm font-medium text-foreground">
+                  No posts yet
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  Anything @{data.account.username} publishes will show up here.
+                </p>
+              </div>
+            ) : (
+              <>
+                <OverviewToolbar
+                  sort={sort}
+                  onSortChange={setSort}
+                  mediaType={activeMediaType}
+                  mediaTypes={mediaTypes}
+                  onMediaTypeChange={setMediaType}
+                  query={query}
+                  onQueryChange={setQuery}
+                  shown={visiblePosts.length}
+                  total={posts.length}
+                  onReset={resetFilters}
+                />
+
+                {visiblePosts.length === 0 ? (
+                  <div className="rounded-panel border border-border bg-surface p-10 text-center shadow-hair">
+                    <p className="text-sm font-medium text-foreground">
+                      No posts match these filters
+                    </p>
+                    <p className="mt-1 text-sm text-muted">
+                      {posts.length.toLocaleString()} post
+                      {posts.length === 1 ? " is" : "s are"} loaded for this
+                      range.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="mt-4 rounded-btn border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground motion-safe:transition-colors hover:border-border-firm"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                ) : (
+                  <PostGrid posts={visiblePosts} onSelect={setSelectedPost} />
+                )}
+              </>
+            )}
+          </section>
+        </>
+      ) : null}
+
+      {selectedPost && (
+        <PostDetailPanel
+          post={selectedPost}
+          onClose={() => setSelectedPost(null)}
+        />
+      )}
     </div>
   );
 }

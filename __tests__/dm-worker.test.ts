@@ -321,6 +321,9 @@ describe("DM Worker — Full Pipeline", () => {
         instagramAccount: true,
         workspace: true,
         trackedLinks: {
+          // Reveal-side links only; the follow-up card's link is excluded so
+          // it never becomes a button on this message.
+          where: { purpose: "REVEAL" },
           select: {
             slug: true,
             label: true,

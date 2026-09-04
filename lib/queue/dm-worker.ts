@@ -20,6 +20,7 @@ import {
   sendCommentReply,
   sendDirectMessage,
   sendDirectMessageWithButton,
+  sendDirectMessageWithCard,
   sendDirectMessageWithLinkButton,
   sendPrivateReply,
   sendPrivateReplyWithButton,
@@ -40,6 +41,13 @@ import {
 } from "@/lib/tracking/message";
 
 const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
+
+// TrackedLink.purpose values. The reveal DM and the follow-up card each own
+// their links, so every reveal-side query filters to REVEAL_LINK and the
+// follow-up to FOLLOWUP_LINK. Without this the follow-up's link would show up
+// as a third button on the reveal message.
+const REVEAL_LINK = "REVEAL";
+const FOLLOWUP_LINK = "FOLLOWUP";
 
 function formatError(error: unknown): string {
   if (error instanceof MetaApiError) {
@@ -220,6 +228,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       instagramAccount: true,
       workspace: true,
       trackedLinks: {
+        where: { purpose: REVEAL_LINK },
         select: {
           slug: true,
           label: true,
@@ -701,6 +710,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
       instagramAccount: true,
       workspace: true,
       trackedLinks: {
+        where: { purpose: REVEAL_LINK },
         select: { slug: true, label: true, destinationUrl: true },
         orderBy: { createdAt: "asc" },
       },
@@ -897,7 +907,16 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
 
   const automation = await prisma.automation.findFirst({
     where: { id: automationId, isActive: true },
-    include: { instagramAccount: true },
+    include: {
+      instagramAccount: true,
+      // Only the follow-up's own link. The reveal's links live under a
+      // different purpose and must never be sent here.
+      trackedLinks: {
+        where: { purpose: FOLLOWUP_LINK },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+      },
+    },
   });
 
   if (
@@ -917,15 +936,61 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
     return;
   }
 
+  const bodyText = renderMessageWithoutLink({
+    message: automation.followUpMessage,
+    commenterName: commenterName ?? null,
+  });
+
+  // A card needs somewhere to point. Prefer the tracked link so follow-up
+  // clicks are attributed, and fall back to the raw URL when the campaign was
+  // saved before tracking existed.
+  const followUpLink = automation.trackedLinks[0];
+  const cardUrl = followUpLink
+    ? buildTrackedUrl(followUpLink.slug)
+    : automation.followUpLinkUrl?.trim() || null;
+  const cardTitle = automation.followUpCardTitle?.trim() || bodyText;
+
   try {
+    if (cardUrl && cardTitle) {
+      try {
+        await sendDirectMessageWithCard(
+          accessToken,
+          automation.instagramAccount.instagramId,
+          userId,
+          {
+            title: cardTitle,
+            subtitle: automation.followUpCardSubtitle,
+            imageUrl: automation.followUpImageUrl,
+            imageAspect: automation.followUpImageAspect,
+            buttonTitle: automation.followUpButtonLabel?.trim() || "Open link",
+            buttonUrl: cardUrl,
+          }
+        );
+        return;
+      } catch (cardError) {
+        // A closed 24-hour window rejects plain text too, so don't retry into
+        // a misleading second error.
+        if (!isTemplateRejection(cardError)) throw cardError;
+        console.log(
+          "[DM Worker] Follow-up card rejected, falling back to inline link:",
+          formatError(cardError)
+        );
+        await sendDirectMessage(
+          accessToken,
+          automation.instagramAccount.instagramId,
+          userId,
+          bodyText ? `${bodyText}
+${cardUrl}` : cardUrl
+        );
+        return;
+      }
+    }
+
     await sendDirectMessage(
       accessToken,
       automation.instagramAccount.instagramId,
       userId,
-      renderMessageWithoutLink({
-        message: automation.followUpMessage,
-        commenterName: commenterName ?? null,
-      })
+      bodyText
     );
   } catch (error) {
     console.log(
@@ -956,6 +1021,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
       instagramAccount: true,
       workspace: true,
       trackedLinks: {
+        where: { purpose: REVEAL_LINK },
         select: { slug: true, label: true, destinationUrl: true },
         orderBy: { createdAt: "asc" },
       },

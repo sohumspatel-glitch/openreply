@@ -281,7 +281,7 @@ export default function CampaignsPage() {
     return (
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="panel rounded p-6 h-36" />
+          <div key={i} className="panel p-6 h-36" />
         ))}
       </div>
     );
@@ -322,13 +322,13 @@ export default function CampaignsPage() {
           )}
           <Link
             href="/campaigns/import"
-            className="flex-1 rounded border border-border px-4 py-2 text-center text-sm font-medium text-muted hover:text-foreground sm:flex-none"
+            className="flex-1 rounded-btn border border-border-firm px-4 py-2 text-center text-sm font-medium text-muted hover:text-foreground sm:flex-none"
           >
             Import
           </Link>
           <Link
             href="/campaigns/new"
-            className="flex-1 rounded bg-accent px-4 py-2 text-center text-sm font-medium text-white hover:bg-accent-hover sm:flex-none"
+            className="flex-1 rounded-btn bg-accent-fill px-4 py-2 text-center text-sm font-medium text-on-ink hover:bg-accent-fill-hover sm:flex-none"
           >
             New Campaign
           </Link>
@@ -342,17 +342,17 @@ export default function CampaignsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search campaigns by name, keyword, or message…"
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+            className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
           />
-          <div className="inline-flex shrink-0 rounded-lg bg-surface p-1">
+          <div className="inline-flex shrink-0 rounded-btn bg-surface-warm p-1">
             {(["all", "active", "paused"] as const).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setStatusFilter(s)}
-                className={`rounded-md px-3 py-1.5 text-sm capitalize transition-colors ${
+                className={`rounded-chip px-3 py-1.5 text-sm capitalize transition-colors ${
                   statusFilter === s
-                    ? "bg-background font-medium text-foreground ring-1 ring-accent/40"
+                    ? "bg-surface font-medium text-foreground ring-1 ring-accent/40"
                     : "text-muted hover:text-foreground"
                 }`}
               >
@@ -365,14 +365,14 @@ export default function CampaignsPage() {
 
       {/* Empty state */}
       {automations.length === 0 && (
-        <div className="panel rounded p-8 text-center sm:p-12">
+        <div className="panel p-8 text-center sm:p-12">
           <h3 className="text-lg font-semibold mb-2">No campaigns yet</h3>
           <p className="text-sm text-muted mb-6 max-w-sm mx-auto">
             Create your first comment-to-DM campaign to turn a post or reel into a measurable conversation flow.
           </p>
           <Link
             href="/campaigns/new"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-accent text-sm font-semibold text-white hover:bg-accent-hover transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn bg-accent-fill text-sm font-semibold text-on-ink hover:bg-accent-fill-hover transition-colors"
           >
             Create Campaign
           </Link>
@@ -381,7 +381,7 @@ export default function CampaignsPage() {
 
       {/* No matches for the current filter */}
       {automations.length > 0 && filtered.length === 0 && (
-        <div className="panel rounded p-8 text-center text-sm text-muted">
+        <div className="panel p-8 text-center text-sm text-muted">
           No campaigns match your search.
         </div>
       )}
@@ -394,7 +394,7 @@ export default function CampaignsPage() {
           <div
             key={auto.id}
             onClick={() => router.push(`/campaigns/${auto.id}`)}
-            className="panel rounded p-4 hover:border-border-hover transition-all cursor-pointer"
+            className="panel p-4 hover:border-border-firm transition-all cursor-pointer"
           >
             {/* Wraps rather than compressing: on a phone the action buttons drop
                 to their own line instead of squeezing the campaign summary. */}
@@ -414,7 +414,7 @@ export default function CampaignsPage() {
                     <img
                       src={thumbnails[auto.postId]}
                       alt="Campaign reel"
-                      className="w-12 h-12 rounded object-cover border border-border hover:border-border-hover"
+                      className="w-12 h-12 rounded-chip object-cover border border-border hover:border-border-firm"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                       }}
@@ -432,7 +432,7 @@ export default function CampaignsPage() {
                     <img
                       src={thumbnails[auto.postId]}
                       alt="Campaign post"
-                      className="w-12 h-12 rounded object-cover border border-border"
+                      className="w-12 h-12 rounded-chip object-cover border border-border"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                       }}
@@ -443,30 +443,30 @@ export default function CampaignsPage() {
               <div className="min-w-[12rem] flex-1">
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <h3 className="text-sm font-semibold truncate">{auto.name}</h3>
-                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted">
+                  <span className="shrink-0 rounded-pill border border-border px-2 py-0.5 text-xs text-muted">
                     @{auto.instagramAccount.username}
                   </span>
                   <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    className={`text-xs px-2 py-0.5 rounded-pill font-medium ${
                       auto.isActive
                         ? "bg-success/10 text-success"
-                        : "bg-zinc-500/10 text-muted"
+                        : "bg-surface-warm text-muted"
                     }`}
                   >
                     {auto.isActive ? "Active" : "Paused"}
                   </span>
                   {auto.pendingNextReel && (
-                    <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-warning">
+                    <span className="shrink-0 rounded-pill bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
                       Waiting for next reel
                     </span>
                   )}
                   {auto.requireFollow && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                    <span className="shrink-0 rounded-pill bg-accent-tint px-2 py-0.5 text-xs font-medium text-accent-text">
                       Follow gate
                     </span>
                   )}
                   {auto.trackedLinks.length >= 2 && (
-                    <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                    <span className="shrink-0 rounded-pill bg-accent-tint px-2 py-0.5 text-xs font-medium text-accent-text">
                       2 links
                     </span>
                   )}
@@ -477,7 +477,7 @@ export default function CampaignsPage() {
                   {auto.keywords.map((kw) => (
                     <span
                       key={kw}
-                      className="px-2 py-0.5 rounded-md bg-accent/10 text-accent text-xs font-medium border border-accent/10"
+                      className="px-2 py-0.5 rounded-chip bg-accent-tint text-accent-text text-xs font-medium border border-accent-rim"
                     >
                       {kw}
                     </span>
@@ -489,13 +489,13 @@ export default function CampaignsPage() {
 
                 {/* Tracked link sent */}
                 {auto.trackedLinks[0]?.trackedUrl && (
-                  <p className="mt-2 truncate font-mono text-xs text-zinc-500">
+                  <p className="mt-2 truncate font-mono text-xs text-faint">
                     {auto.trackedLinks[0].trackedUrl}
                   </p>
                 )}
 
                 {/* Stats */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-xs text-zinc-500">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-xs text-faint">
                   <span className="font-medium text-foreground">
                     {auto._count.dmLogs} runs
                   </span>
@@ -518,7 +518,7 @@ export default function CampaignsPage() {
                     {auto.analytics.topKeywords.map((keyword) => (
                       <span
                         key={keyword.keyword}
-                        className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted"
+                        className="rounded-chip border border-border bg-surface-warm px-2 py-1 text-xs text-muted"
                       >
                         {keyword.keyword}: {keyword.count}
                       </span>
@@ -536,7 +536,7 @@ export default function CampaignsPage() {
                 {auto.postUrl && (
                   <button
                     onClick={() => void copyReelUrl(auto)}
-                    className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
+                    className="shrink-0 rounded-pill border border-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-border-firm hover:text-foreground"
                   >
                     {copiedId === auto.id ? "Copied!" : "Copy URL"}
                   </button>
@@ -546,12 +546,12 @@ export default function CampaignsPage() {
                   onClick={() => toggleActive(auto.id, auto.isActive)}
                   className={`
                     relative w-11 h-6 rounded-full transition-colors
-                    ${auto.isActive ? "bg-accent" : "bg-zinc-300"}
+                    ${auto.isActive ? "bg-accent" : "bg-border-firm"}
                   `}
                 >
                   <span
                     className={`
-                      absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-sm
+                      absolute top-1 w-4 h-4 rounded-full bg-surface transition-transform shadow-hair
                       ${auto.isActive ? "left-6" : "left-1"}
                     `}
                   />
@@ -564,7 +564,7 @@ export default function CampaignsPage() {
                       setMenuOpenId((cur) => (cur === auto.id ? null : auto.id))
                     }
                     aria-label="More actions"
-                    className="px-2 py-1 rounded text-lg leading-none text-muted hover:text-foreground"
+                    className="px-2 py-1 rounded-btn text-lg leading-none text-muted hover:text-foreground"
                   >
                     ⋯
                   </button>
@@ -574,10 +574,10 @@ export default function CampaignsPage() {
                         className="fixed inset-0 z-10"
                         onClick={() => setMenuOpenId(null)}
                       />
-                      <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
+                      <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-panel border border-border bg-surface shadow-panel">
                         <button
                           onClick={() => void duplicateAutomation(auto)}
-                          className="block w-full px-3 py-2 text-left text-sm text-foreground hover:bg-surface-hover"
+                          className="block w-full px-3 py-2 text-left text-sm text-foreground hover:bg-surface-warm"
                         >
                           Duplicate
                         </button>
@@ -586,7 +586,7 @@ export default function CampaignsPage() {
                             setMenuOpenId(null);
                             void deleteAutomation(auto.id);
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm text-error hover:bg-surface-hover"
+                          className="block w-full px-3 py-2 text-left text-sm text-error hover:bg-surface-warm"
                         >
                           Delete
                         </button>
@@ -604,7 +604,7 @@ export default function CampaignsPage() {
       {/* Reel lightbox */}
       {playingVideo && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-glass-ink-strong p-4"
           onClick={() => setPlayingVideo(null)}
         >
           <div
@@ -617,7 +617,7 @@ export default function CampaignsPage() {
                   href={playingVideo.postUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-zinc-300 hover:text-white"
+                  className="text-on-ink-soft hover:text-on-ink"
                 >
                   Open on Instagram
                 </a>
@@ -625,7 +625,7 @@ export default function CampaignsPage() {
               <button
                 type="button"
                 onClick={() => setPlayingVideo(null)}
-                className="text-zinc-300 hover:text-white"
+                className="text-on-ink-soft hover:text-on-ink"
               >
                 Close
               </button>
@@ -636,7 +636,7 @@ export default function CampaignsPage() {
               autoPlay
               loop
               playsInline
-              className="max-h-[80vh] max-w-full rounded-lg"
+              className="max-h-[80vh] max-w-full rounded-media"
             />
           </div>
         </div>

@@ -30,7 +30,7 @@ export default function LegalShell({
       </header>
 
       <article className="mx-auto max-w-3xl px-5 py-14">
-        <p className="text-sm font-semibold uppercase text-accent">
+        <p className="text-sm font-semibold uppercase text-accent-text">
           Last updated {updatedAt}
         </p>
         <h1 className="mt-4 text-4xl font-black text-foreground sm:text-5xl">

@@ -90,21 +90,21 @@ export default function ImportCampaignsPage() {
           Paste a CSV with one row per campaign. Each row opens in the builder
           prefilled and editable, so you can review it and pick the reel before
           saving. Required columns are{" "}
-          <code className="text-accent">keywords</code> and{" "}
-          <code className="text-accent">dm_message</code>. Optional:{" "}
-          <code className="text-accent">name</code>,{" "}
-          <code className="text-accent">public_reply</code>,{" "}
-          <code className="text-accent">tracked_url</code>,{" "}
-          <code className="text-accent">opening_dm</code>,{" "}
-          <code className="text-accent">opening_dm_button</code>. Keywords go in
+          <code className="text-accent-text">keywords</code> and{" "}
+          <code className="text-accent-text">dm_message</code>. Optional:{" "}
+          <code className="text-accent-text">name</code>,{" "}
+          <code className="text-accent-text">public_reply</code>,{" "}
+          <code className="text-accent-text">tracked_url</code>,{" "}
+          <code className="text-accent-text">opening_dm</code>,{" "}
+          <code className="text-accent-text">opening_dm_button</code>. Keywords go in
           one cell, separated by commas. Use{" "}
-          <code className="text-accent">{"{link}"}</code> in the message to
+          <code className="text-accent-text">{"{link}"}</code> in the message to
           insert the tracked link.
         </p>
       </div>
 
       {error && (
-        <div className="p-4 rounded bg-error/10 border border-error/20 text-error text-sm">
+        <div className="p-4 rounded-panel bg-error-tint border border-error/20 text-error text-sm">
           {error}
         </div>
       )}
@@ -131,7 +131,7 @@ export default function ImportCampaignsPage() {
           onChange={(e) => setCsv(e.target.value)}
           placeholder={SAMPLE}
           rows={10}
-          className="w-full px-4 py-3 rounded bg-surface border border-border text-sm font-mono text-foreground placeholder:text-zinc-600 focus:border-accent/40 focus:outline-none resize-y"
+          className="w-full px-4 py-3 rounded-control bg-surface-field border border-border-firm text-sm font-mono text-foreground placeholder:text-faint focus:border-accent resize-y"
         />
         <button
           type="button"
@@ -145,13 +145,13 @@ export default function ImportCampaignsPage() {
       <div className="flex items-center gap-4">
         <button
           onClick={startImport}
-          className="px-5 py-2 rounded bg-accent text-sm font-medium text-white hover:bg-accent-hover"
+          className="px-5 py-2 rounded-btn bg-accent-fill text-sm font-medium text-on-ink hover:bg-accent-fill-hover"
         >
           Review and import
         </button>
         <button
           onClick={() => router.push("/campaigns")}
-          className="px-5 py-2 rounded text-sm text-muted hover:text-foreground border border-border"
+          className="px-5 py-2 rounded-btn text-sm text-muted hover:text-foreground border border-border-firm"
         >
           Cancel
         </button>

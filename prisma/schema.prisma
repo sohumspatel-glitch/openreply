@@ -195,6 +195,20 @@ model Automation {
   // Minutes to wait after the link is delivered before sending the follow-up.
   // 0 sends it right away.
   followUpDelayMinutes Int @default(0)
+  // The follow-up can be a rich link card (Meta's generic template): an image,
+  // a title, a subtitle and one tappable button. A plain text message can only
+  // carry a raw URL, which Instagram renders as unstyled text. When
+  // followUpLinkUrl is empty the follow-up stays a plain text message, so
+  // existing campaigns are unaffected.
+  followUpLinkUrl      String?
+  followUpButtonLabel  String?
+  followUpCardTitle    String?
+  followUpCardSubtitle String?
+  followUpImageUrl     String?
+  // Meta renders card images at 1.91:1 by default and center-crops anything
+  // else. "square" keeps a 1:1 creative whole. Verified accepted by the
+  // Instagram messages endpoint.
+  followUpImageAspect  String?
   publicReplyEnabled Boolean @default(false)
   publicReplyMessage String?
   publicReplyMessages String[] @default([])
@@ -276,6 +290,10 @@ model TrackedLink {
   slug           String   @unique
   label          String?
   destinationUrl String
+  // Which message this link belongs to: "REVEAL" for the link DM, "FOLLOWUP"
+  // for the follow-up card. The reveal builds its buttons from its own links
+  // only, so a follow-up link never leaks into the reveal message.
+  purpose        String   @default("REVEAL")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

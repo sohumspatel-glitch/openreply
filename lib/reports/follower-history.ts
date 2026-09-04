@@ -77,7 +77,7 @@ export function reconstructFollowerTotals(
 }
 
 /**
- * Reconstruct up to 30 days of history from follower_count insight deltas and
+ * Reconstruct up to 90 days of history from follower_count insight deltas and
  * store it, so a freshly connected account has a chart on day one instead of a
  * single point.
  *

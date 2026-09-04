@@ -102,7 +102,7 @@ export default function PostPicker({
     return (
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
         {[...Array(8)].map((_, i) => (
-          <div key={i} className="aspect-square rounded bg-surface" />
+          <div key={i} className="aspect-square rounded-chip bg-surface-warm" />
         ))}
       </div>
     );
@@ -112,7 +112,7 @@ export default function PostPicker({
     return (
       <div className="text-center py-8">
         <p className="text-sm text-muted">{error}</p>
-        <p className="text-xs text-zinc-500 mt-1">Connect your Instagram account first</p>
+        <p className="text-xs text-faint mt-1">Connect your Instagram account first</p>
       </div>
     );
   }
@@ -147,7 +147,7 @@ export default function PostPicker({
             setShown(PAGE_SIZE);
           }}
           placeholder="Search your posts by caption…"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+          className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
         />
         <span className="shrink-0 text-xs text-muted">{posts.length}</span>
       </div>
@@ -187,13 +187,13 @@ export default function PostPicker({
             aria-pressed={isSelected}
             title={isUsed ? `Already used by "${usedByName}"` : undefined}
             className={`
-              relative aspect-square rounded overflow-hidden border-2
+              relative aspect-square rounded-chip overflow-hidden border-2
               ${
                 isSelected
                   ? "border-accent"
                   : isUsed
                     ? "border-warning/40 hover:border-warning/60"
-                    : "border-border hover:border-border-hover"
+                    : "border-border hover:border-border-firm"
               }
             `}
           >
@@ -206,7 +206,7 @@ export default function PostPicker({
                 className={`w-full h-full object-cover ${isUsed ? "opacity-75" : ""}`}
               />
             ) : (
-              <div className="w-full h-full bg-surface flex items-center justify-center">
+              <div className="w-full h-full bg-surface-sand flex items-center justify-center">
                 <span className="text-xs text-muted">No image</span>
               </div>
             )}
@@ -225,7 +225,7 @@ export default function PostPicker({
               />
             )}
             {isSelected && (
-              <span className="absolute bottom-0 inset-x-0 bg-accent text-white text-xs py-1">
+              <span className="absolute bottom-0 inset-x-0 bg-accent-fill text-on-ink text-xs py-1">
                 Selected
               </span>
             )}
@@ -237,7 +237,7 @@ export default function PostPicker({
             <button
               type="button"
               onClick={() => setShown((n) => n + PAGE_SIZE)}
-              className="w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+              className="w-full rounded-btn border border-border-firm py-2 text-sm text-muted hover:text-foreground"
             >
               Show {Math.min(PAGE_SIZE, remaining)} more
             </button>

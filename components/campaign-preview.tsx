@@ -40,6 +40,11 @@ interface CampaignPreviewProps {
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes?: number;
+  followUpCardTitle?: string;
+  followUpCardSubtitle?: string;
+  followUpButtonLabel?: string;
+  followUpImageUrl?: string;
+  followUpImageSquare?: boolean;
 }
 
 const SAMPLE_USER = "username";
@@ -100,7 +105,7 @@ function renderMessage(text: string, hasLink: boolean, linkUrl?: string) {
         key={i}
         className={
           linkUrl || hasLink
-            ? "text-sky-400 underline break-all"
+            ? "text-tan underline break-all"
             : "text-zinc-500 italic"
         }
       >
@@ -321,6 +326,11 @@ function DmScreen({
   followUpEnabled,
   followUpMessage,
   followUpDelayMinutes = 0,
+  followUpCardTitle = "",
+  followUpCardSubtitle = "",
+  followUpButtonLabel = "",
+  followUpImageUrl = "",
+  followUpImageSquare = false,
   linkUrl,
   inboundMessage,
 }: {
@@ -341,6 +351,11 @@ function DmScreen({
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes?: number;
+  followUpCardTitle?: string;
+  followUpCardSubtitle?: string;
+  followUpButtonLabel?: string;
+  followUpImageUrl?: string;
+  followUpImageSquare?: boolean;
   // Present on the keyword-trigger thread: the DM the user sends to start it.
   inboundMessage?: string;
 }) {
@@ -449,20 +464,45 @@ function DmScreen({
             )}
             <div className="flex items-end gap-2">
               <Avatar url={avatarUrl} size={24} />
-              <div className="max-w-[80%] rounded-2xl rounded-bl-md bg-zinc-800 px-3 py-2">
-                <p className="whitespace-pre-wrap text-sm">
-                  {followUpMessage.trim()
-                    ? followUpMessage.replace(/\{username\}/g, SAMPLE_USER)
-                    : "Btw just wanted to say thanks for following me, I appreciate the support 🙌"}
-                </p>
-              </div>
+              {followUpCardTitle.trim() ? (
+                <div className="max-w-[80%] overflow-hidden rounded-2xl rounded-bl-md bg-zinc-800">
+                  {followUpImageUrl.trim() ? (
+                    <img
+                      src={followUpImageUrl}
+                      alt=""
+                      className={`w-full object-cover ${followUpImageSquare ? "aspect-square h-auto" : "h-28"}`}
+                    />
+                  ) : null}
+                  <div className="px-3 py-2">
+                    <p className="text-sm font-semibold leading-snug">
+                      {followUpCardTitle.replace(/\{username\}/g, SAMPLE_USER)}
+                    </p>
+                    {followUpCardSubtitle.trim() ? (
+                      <p className="mt-0.5 text-xs text-zinc-400">
+                        {followUpCardSubtitle}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mx-1.5 mb-1.5 rounded-xl bg-zinc-700 px-4 py-1.5 text-center text-sm font-medium text-white">
+                    {followUpButtonLabel || "Open link"}
+                  </div>
+                </div>
+              ) : (
+                <div className="max-w-[80%] rounded-2xl rounded-bl-md bg-zinc-800 px-3 py-2">
+                  <p className="whitespace-pre-wrap text-sm">
+                    {followUpMessage.trim()
+                      ? followUpMessage.replace(/\{username\}/g, SAMPLE_USER)
+                      : "Btw just wanted to say thanks for following me, I appreciate the support 🙌"}
+                  </p>
+                </div>
+              )}
             </div>
           </>
         )}
       </div>
 
       <div className="flex items-center gap-2 px-3 py-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-white">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-on-ink">
           {Ico.camera("h-4 w-4")}
         </span>
         <div className="flex-1 rounded-full bg-zinc-800 px-3 py-2 text-xs text-zinc-500">Message…</div>
@@ -527,6 +567,11 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
             followUpEnabled={props.followUpEnabled}
             followUpMessage={props.followUpMessage}
             followUpDelayMinutes={props.followUpDelayMinutes}
+            followUpCardTitle={props.followUpCardTitle}
+            followUpCardSubtitle={props.followUpCardSubtitle}
+            followUpButtonLabel={props.followUpButtonLabel}
+            followUpImageUrl={props.followUpImageUrl}
+            followUpImageSquare={props.followUpImageSquare}
             linkUrl={props.linkUrl}
           />
         )}
@@ -549,21 +594,26 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
             followUpEnabled={props.followUpEnabled}
             followUpMessage={props.followUpMessage}
             followUpDelayMinutes={props.followUpDelayMinutes}
+            followUpCardTitle={props.followUpCardTitle}
+            followUpCardSubtitle={props.followUpCardSubtitle}
+            followUpButtonLabel={props.followUpButtonLabel}
+            followUpImageUrl={props.followUpImageUrl}
+            followUpImageSquare={props.followUpImageSquare}
             linkUrl={props.linkUrl}
             inboundMessage={props.sampleComment}
           />
         )}
       </Phone>
 
-      <div className="inline-flex rounded-full bg-surface p-1">
+      <div className="inline-flex rounded-pill bg-surface-warm p-1">
         {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => onTabChange(t.key)}
-            className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
+            className={`rounded-pill px-4 py-1.5 text-sm transition-colors ${
               activeTab === t.key
-                ? "bg-background font-medium text-foreground ring-1 ring-accent/40"
+                ? "bg-surface font-medium text-foreground ring-1 ring-accent/40"
                 : "text-muted hover:text-foreground"
             }`}
           >

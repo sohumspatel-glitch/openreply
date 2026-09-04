@@ -4,12 +4,31 @@ import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { getConversationMessages, MetaApiError } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 
+/** A tappable link on a template card. */
+export interface ThreadButton {
+  title: string;
+  url: string | null;
+}
+
+/**
+ * One rendered part of a message. Every automation we send arrives as a
+ * `template`; people send `image` / `video` / `file`.
+ */
+export interface ThreadAttachment {
+  kind: "template" | "image" | "video" | "file";
+  title: string | null;
+  subtitle: string | null;
+  imageUrl: string | null;
+  buttons: ThreadButton[];
+}
+
 export interface ThreadMessage {
   id: string;
   text: string;
   fromMe: boolean;
   fromUsername: string | null;
   createdTime: string | null;
+  attachments: ThreadAttachment[];
 }
 
 export interface ThreadResponse {
@@ -53,6 +72,32 @@ export async function GET(request: NextRequest, { params }: RouteProps) {
         fromMe: m.from?.id === account.instagramId,
         fromUsername: m.from?.username ?? null,
         createdTime: m.created_time ?? null,
+        attachments: (m.attachments?.data ?? []).map(
+          (a): ThreadAttachment => {
+            const template = a.generic_template;
+            if (template) {
+              return {
+                kind: "template",
+                title: template.title?.trim() || null,
+                subtitle: template.subtitle?.trim() || null,
+                imageUrl: template.media_url ?? null,
+                buttons: (template.cta ?? [])
+                  .filter((c) => c.title)
+                  .map((c) => ({ title: c.title!, url: c.url ?? null })),
+              };
+            }
+            const image = a.image_data?.url ?? a.image_data?.preview_url ?? null;
+            const video = a.video_data?.url ?? null;
+            return {
+              kind: image ? "image" : video ? "video" : "file",
+              title: a.name?.trim() || null,
+              subtitle: null,
+              // A video still is more useful than a filename, so prefer it.
+              imageUrl: image ?? a.video_data?.preview_url ?? null,
+              buttons: [],
+            };
+          }
+        ),
       }))
       .reverse();
 

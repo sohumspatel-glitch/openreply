@@ -48,6 +48,12 @@ interface LoadedCampaign {
   followUpEnabled: boolean;
   followUpMessage: string | null;
   followUpDelayMinutes: number | null;
+  followUpLinkUrl?: string | null;
+  followUpButtonLabel?: string | null;
+  followUpCardTitle?: string | null;
+  followUpCardSubtitle?: string | null;
+  followUpImageUrl?: string | null;
+  followUpImageAspect?: string | null;
   publicReplyEnabled: boolean;
   publicReplyMessage: string | null;
   publicReplyMessages: string[];
@@ -89,13 +95,13 @@ function Radio({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
-        checked ? "border-accent bg-accent/5" : "border-border hover:border-border-hover"
+      className={`flex w-full items-center gap-3 rounded-btn border px-3 py-2.5 text-left text-sm transition-colors ${
+        checked ? "border-accent bg-accent-tint" : "border-border hover:border-border-firm"
       }`}
     >
       <span
         className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
-          checked ? "border-accent" : "border-zinc-500"
+          checked ? "border-accent" : "border-muted"
         }`}
       >
         {checked && <span className="h-2 w-2 rounded-full bg-accent" />}
@@ -117,11 +123,11 @@ function Toggle({
       type="button"
       onClick={onToggle}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-        on ? "bg-accent" : "bg-zinc-300"
+        on ? "bg-accent" : "bg-border-firm"
       }`}
     >
       <span
-        className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+        className={`absolute top-1 h-4 w-4 rounded-full bg-surface transition-transform ${
           on ? "left-6" : "left-1"
         }`}
       />
@@ -180,6 +186,15 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpMessage, setFollowUpMessage] = useState("");
   const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(0);
+  // A card needs a destination, so the link URL is what turns the follow-up
+  // from plain text into a card. The toggle just reveals the fields.
+  const [followUpAsCard, setFollowUpAsCard] = useState(false);
+  const [followUpLinkUrl, setFollowUpLinkUrl] = useState("");
+  const [followUpButtonLabel, setFollowUpButtonLabel] = useState("");
+  const [followUpCardTitle, setFollowUpCardTitle] = useState("");
+  const [followUpCardSubtitle, setFollowUpCardSubtitle] = useState("");
+  const [followUpImageUrl, setFollowUpImageUrl] = useState("");
+  const [followUpImageSquare, setFollowUpImageSquare] = useState(false);
 
   const [previewTab, setPreviewTab] = useState<PreviewTab>("dm");
 
@@ -288,6 +303,13 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         setFollowUpEnabled(c.followUpEnabled ?? false);
         setFollowUpMessage(c.followUpMessage ?? "");
         setFollowUpDelayMinutes(c.followUpDelayMinutes ?? 0);
+        setFollowUpAsCard(Boolean(c.followUpLinkUrl));
+        setFollowUpLinkUrl(c.followUpLinkUrl ?? "");
+        setFollowUpButtonLabel(c.followUpButtonLabel ?? "");
+        setFollowUpCardTitle(c.followUpCardTitle ?? "");
+        setFollowUpCardSubtitle(c.followUpCardSubtitle ?? "");
+        setFollowUpImageUrl(c.followUpImageUrl ?? "");
+        setFollowUpImageSquare(c.followUpImageAspect === "square");
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -427,6 +449,20 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       followUpEnabled,
       followUpMessage: followUpEnabled ? followUpMessage.trim() : "",
       followUpDelayMinutes: followUpEnabled ? followUpDelayMinutes : 0,
+      followUpLinkUrl:
+        followUpEnabled && followUpAsCard ? followUpLinkUrl.trim() : "",
+      followUpButtonLabel:
+        followUpEnabled && followUpAsCard ? followUpButtonLabel.trim() : "",
+      followUpCardTitle:
+        followUpEnabled && followUpAsCard ? followUpCardTitle.trim() : "",
+      followUpCardSubtitle:
+        followUpEnabled && followUpAsCard ? followUpCardSubtitle.trim() : "",
+      followUpImageUrl:
+        followUpEnabled && followUpAsCard ? followUpImageUrl.trim() : "",
+      followUpImageAspect:
+        followUpEnabled && followUpAsCard && followUpImageSquare
+          ? "square"
+          : "horizontal",
       isActive: activeValue,
     };
 
@@ -533,16 +569,16 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   }
 
   if (loading) {
-    return <div className="panel h-64 rounded" />;
+    return <div className="panel h-64" />;
   }
 
   if (notFound) {
     return (
-      <div className="panel rounded p-8 text-center">
+      <div className="panel p-8 text-center">
         <p className="text-sm text-muted">Campaign not found.</p>
         <button
           onClick={() => router.push("/campaigns")}
-          className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
+          className="mt-4 rounded-btn border border-border-firm px-4 py-2 text-sm text-muted hover:text-foreground"
         >
           Back to campaigns
         </button>
@@ -553,7 +589,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   return (
     <div className="space-y-6">
       {importQueue && (
-        <div className="rounded border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
+        <div className="rounded-panel border border-accent-rim bg-accent-tint px-4 py-3 text-sm">
           <span className="font-medium text-foreground">
             Importing {importTotal - importQueue.length + 1} of {importTotal}.
           </span>{" "}
@@ -573,8 +609,8 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 {name || "Untitled campaign"}
               </span>
               <span
-                className={`rounded px-2 py-0.5 text-xs font-semibold ${
-                  isActive ? "bg-success/15 text-success" : "bg-zinc-500/15 text-muted"
+                className={`rounded-chip px-2 py-0.5 text-xs font-semibold ${
+                  isActive ? "bg-success/15 text-success" : "bg-surface-warm text-muted"
                 }`}
               >
                 {isActive ? "LIVE" : "PAUSED"}
@@ -590,7 +626,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               type="button"
               onClick={skipRow}
               disabled={saving}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
+              className="rounded-btn border border-border-firm px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
             >
               {importQueue.length > 1 ? "Skip" : "Skip & finish"}
             </button>
@@ -601,7 +637,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 type="button"
                 onClick={() => handleSubmit(false)}
                 disabled={saving}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
+                className="rounded-btn border border-border-firm px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
               >
                 Stop
               </button>
@@ -610,7 +646,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 type="button"
                 onClick={() => handleSubmit(true)}
                 disabled={saving}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
+                className="rounded-btn border border-border-firm px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
               >
                 Go Live
               </button>
@@ -619,7 +655,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             type="button"
             onClick={() => handleSubmit(mode === "new" ? true : isActive)}
             disabled={saving}
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="rounded-btn bg-accent-fill px-5 py-2 text-sm font-medium text-on-ink hover:bg-accent-fill-hover disabled:opacity-50"
           >
             {saving ? "Saving…" : mode === "new" ? "Go Live" : "Save changes"}
           </button>
@@ -632,7 +668,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       {/* Left: controls */}
       <div className="space-y-8 min-w-0">
         {error && (
-          <div className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
+          <div className="rounded-panel border border-error/20 bg-error-tint p-3 text-sm text-error">
             {error}
           </div>
         )}
@@ -646,7 +682,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. YC referral"
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+            className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
             maxLength={100}
           />
           {accounts.length > 1 && (
@@ -675,7 +711,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             a specific post or reel
           </Radio>
           {triggerScope === "specific" && (
-            <div className="rounded-lg border border-border p-2">
+            <div className="rounded-panel border border-border p-2">
               <PostPicker
                 selectedPostId={postId}
                 instagramAccountId={selectedAccountId}
@@ -711,7 +747,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 value={keywordText}
                 onChange={(e) => setKeywordText(e.target.value)}
                 placeholder="Enter a word or multiple"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
               />
               <p className="text-xs text-muted">Use commas to separate words</p>
             </div>
@@ -722,7 +758,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           >
             any word
           </Radio>
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3 rounded-btn border border-border px-3 py-2.5">
             <span className="text-sm text-foreground">
               also reply when someone DMs{" "}
               {matchMode === "any" ? "anything" : "these words"}
@@ -739,7 +775,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 : "A DM containing any of these words gets the same reply, no comment needed."}
             </p>
           )}
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+          <div className="flex items-center justify-between rounded-btn border border-border px-3 py-2.5">
             <span className="text-sm text-foreground">
               reply to their comments under the post
             </span>
@@ -761,7 +797,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                     }
                     placeholder="Sent you a DM! 📩"
                     maxLength={1000}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                    className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                   />
                   {publicReplyMessages.length > 1 && (
                     <button
@@ -785,7 +821,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onClick={() =>
                     setPublicReplyMessages((prev) => [...prev, ""])
                   }
-                  className="text-xs font-medium text-accent hover:underline"
+                  className="text-xs font-medium text-accent-text hover:underline"
                 >
                   + Add another reply
                 </button>
@@ -799,7 +835,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         </Section>
 
         <Section title="They will get">
-          <div className="rounded-lg border border-border p-3">
+          <div className="rounded-panel border border-border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">an opening DM</span>
               <Toggle
@@ -814,20 +850,20 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setOpeningDmMessage(e.target.value)}
                   placeholder="Hey there! I'm so happy you're here 😊"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                  className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent resize-none"
                   maxLength={1000}
                 />
                 <input
                   value={openingDmButtonLabel}
                   onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
                   placeholder="Send me the link"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                   maxLength={64}
                 />
               </div>
             )}
           </div>
-          <div className="mt-3 rounded-lg border border-border p-3">
+          <div className="mt-3 rounded-panel border border-border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
                 a follow requirement first
@@ -844,14 +880,14 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setFollowPromptMessage(e.target.value)}
                   placeholder="quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                  className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent resize-none"
                   maxLength={1000}
                 />
                 <input
                   value={followPromptButtonLabel}
                   onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
                   placeholder="i'm following"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                   maxLength={20}
                 />
                 <p className="text-xs text-muted">
@@ -865,14 +901,14 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         </Section>
 
         <Section title="And then, they will get">
-          <div className="rounded-lg border border-border p-3 space-y-2">
+          <div className="rounded-panel border border-border p-3 space-y-2">
             <span className="text-sm text-foreground">a DM with a link</span>
             <textarea
               value={dmMessage}
               onChange={(e) => setDmMessage(e.target.value)}
               placeholder="Write a message"
               rows={3}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+              className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent resize-none"
               maxLength={1000}
             />
             {linkOpen ? (
@@ -882,14 +918,14 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setTrackedDestinationUrl(e.target.value)}
                   onBlur={ensureLinkToken}
                   placeholder="https://yourlink.com/offer"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                 />
                 <input
                   value={linkButtonLabel}
                   onChange={(e) => setLinkButtonLabel(e.target.value)}
                   placeholder="Button label (e.g. Open link)"
                   maxLength={20}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                 />
                 {secondLinkOpen ? (
                   <div className="space-y-2 border-t border-border pt-2">
@@ -897,21 +933,21 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                       value={secondaryDestinationUrl}
                       onChange={(e) => setSecondaryDestinationUrl(e.target.value)}
                       placeholder="https://yourlink.com/second"
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                      className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                     />
                     <input
                       value={secondaryButtonLabel}
                       onChange={(e) => setSecondaryButtonLabel(e.target.value)}
                       placeholder="Second button label"
                       maxLength={20}
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                      className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                     />
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setSecondLinkOpen(true)}
-                    className="w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+                    className="w-full rounded-btn border border-border-firm py-2 text-sm text-muted hover:text-foreground"
                   >
                     + Add A Second Link
                   </button>
@@ -921,7 +957,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               <button
                 type="button"
                 onClick={() => setLinkOpen(true)}
-                className="w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+                className="w-full rounded-btn border border-border-firm py-2 text-sm text-muted hover:text-foreground"
               >
                 + Add A Link
               </button>
@@ -930,7 +966,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               {"{link}"} inserts the tracked link; {"{username}"} personalizes.
             </p>
           </div>
-          <div className="mt-3 rounded-lg border border-border p-3">
+          <div className="mt-3 rounded-panel border border-border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
                 a follow-up thank-you message
@@ -947,7 +983,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setFollowUpMessage(e.target.value)}
                   placeholder="Btw just wanted to say thanks for following me, I appreciate the support 🙌"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                  className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent resize-none"
                   maxLength={1000}
                 />
                 <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
@@ -962,7 +998,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                         Math.max(0, Math.min(1440, Math.floor(Number(e.target.value) || 0)))
                       )
                     }
-                    className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+                    className="w-20 rounded-control border border-border-firm bg-surface-field px-2 py-1 text-sm text-foreground focus:border-accent"
                   />
                   <span className="text-xs text-muted">
                     minutes after the link
@@ -975,6 +1011,76 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   {" {username}"} personalizes it. Max 24 hours, to stay inside
                   Instagram&apos;s messaging window.
                 </p>
+
+                <div className="mt-3 rounded-panel border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-foreground">
+                      send it as a link card
+                    </span>
+                    <Toggle
+                      on={followUpAsCard}
+                      onToggle={() => setFollowUpAsCard(!followUpAsCard)}
+                    />
+                  </div>
+                  {followUpAsCard ? (
+                    <div className="mt-3 space-y-2">
+                      <input
+                        value={followUpCardTitle}
+                        onChange={(e) => setFollowUpCardTitle(e.target.value)}
+                        placeholder="Card headline"
+                        maxLength={80}
+                        className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
+                      />
+                      <input
+                        value={followUpCardSubtitle}
+                        onChange={(e) => setFollowUpCardSubtitle(e.target.value)}
+                        placeholder="Smaller line under it"
+                        maxLength={80}
+                        className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
+                      />
+                      <input
+                        value={followUpLinkUrl}
+                        onChange={(e) => setFollowUpLinkUrl(e.target.value)}
+                        placeholder="https://yourlink.com/free"
+                        className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
+                      />
+                      <input
+                        value={followUpButtonLabel}
+                        onChange={(e) => setFollowUpButtonLabel(e.target.value)}
+                        placeholder="Button label"
+                        maxLength={20}
+                        className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
+                      />
+                      <input
+                        value={followUpImageUrl}
+                        onChange={(e) => setFollowUpImageUrl(e.target.value)}
+                        placeholder="Image URL (optional)"
+                        className="w-full rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
+                      />
+                      {followUpImageUrl.trim() ? (
+                        <label className="flex items-center justify-between gap-2 py-1">
+                          <span className="text-xs text-muted">
+                            the image is square (1:1)
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={followUpImageSquare}
+                            onChange={(e) =>
+                              setFollowUpImageSquare(e.target.checked)
+                            }
+                            className="h-4 w-4 accent-accent"
+                          />
+                        </label>
+                      ) : null}
+                      <p className="text-xs text-muted">
+                        The card replaces the plain text above: an image, the
+                        headline, the smaller line and one tappable button.
+                        Clicks are tracked separately from the guide link. The
+                        image must be a public https URL.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
           </div>
@@ -1013,6 +1119,11 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             followUpEnabled={followUpEnabled}
             followUpMessage={followUpMessage}
             followUpDelayMinutes={followUpDelayMinutes}
+            followUpCardTitle={followUpAsCard ? followUpCardTitle : ""}
+            followUpCardSubtitle={followUpAsCard ? followUpCardSubtitle : ""}
+            followUpButtonLabel={followUpAsCard ? followUpButtonLabel : ""}
+            followUpImageUrl={followUpAsCard ? followUpImageUrl : ""}
+            followUpImageSquare={followUpImageSquare}
           />
         </div>
       </div>

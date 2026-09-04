@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { readCache, writeCache } from "@/lib/client-cache";
 import type { ConversationListItem } from "@/app/api/instagram/conversations/route";
+import MessageThread from "@/components/inbox/message-thread";
 import type { ThreadMessage } from "@/app/api/instagram/conversations/[id]/route";
 
 const POLL_MS = 12_000;
@@ -216,6 +217,7 @@ export default function InboxPage() {
       fromMe: true,
       fromUsername: null,
       createdTime: new Date().toISOString(),
+      attachments: [],
     };
     setMessages((prev) => [...prev, optimistic]);
     setDraft("");
@@ -270,7 +272,7 @@ export default function InboxPage() {
         )}
       </div>
 
-      <div className="grid h-[calc(100dvh-11rem)] grid-cols-1 overflow-hidden rounded border border-border sm:grid-cols-[300px_1fr]">
+      <div className="grid h-[calc(100dvh-11rem)] grid-cols-1 overflow-hidden rounded-card border border-border sm:grid-cols-[300px_1fr]">
         {/* Conversation list. On mobile it takes the full pane and is hidden
             once a thread is open (ManyChat-style); on sm+ it is always shown. */}
         <div
@@ -297,14 +299,14 @@ export default function InboxPage() {
                     type="button"
                     onClick={() => openConversation(c.id)}
                     className={`block w-full border-b border-border px-4 py-3 text-left ${
-                      isActive ? "bg-surface-hover" : "hover:bg-surface-hover"
+                      isActive ? "bg-surface-warm" : "hover:bg-surface-warm"
                     }`}
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-sm font-medium text-foreground">
                         @{c.contact.username ?? "unknown"}
                       </span>
-                      <span className="shrink-0 text-[11px] text-zinc-500">
+                      <span className="shrink-0 text-[11px] text-faint">
                         {formatTime(c.updatedTime)}
                       </span>
                     </div>
@@ -336,7 +338,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   onClick={() => setActiveId(null)}
-                  className="-ml-1 rounded px-2 py-1 text-muted hover:text-foreground sm:hidden"
+                  className="-ml-1 rounded-btn px-2 py-1 text-muted hover:text-foreground sm:hidden"
                   aria-label="Back to conversations"
                 >
                   Back
@@ -346,36 +348,11 @@ export default function InboxPage() {
                 </span>
               </div>
 
-              <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
-                {threadLoading && messages.length === 0 ? (
-                  <p className="text-sm text-muted">Loading…</p>
-                ) : messages.length === 0 ? (
-                  <p className="text-sm text-muted">No messages.</p>
-                ) : (
-                  messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className={`flex ${m.fromMe ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
-                          m.fromMe
-                            ? "bg-accent text-white"
-                            : "bg-surface text-foreground border border-border"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                        <p
-                          className={`mt-1 text-[10px] ${
-                            m.fromMe ? "text-white/70" : "text-zinc-500"
-                          }`}
-                        >
-                          {formatTime(m.createdTime)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
+              <div
+                ref={scrollRef}
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-black"
+              >
+                <MessageThread messages={messages} loading={threadLoading} />
               </div>
 
               <div className="shrink-0 border-t border-border p-3">
@@ -389,13 +366,13 @@ export default function InboxPage() {
                     onKeyDown={handleKeyDown}
                     rows={1}
                     placeholder="Write a reply…  (Enter to send, Shift+Enter for a new line)"
-                    className="max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                    className="max-h-32 min-h-[40px] flex-1 resize-none rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent"
                   />
                   <button
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={sending || !draft.trim()}
-                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                    className="rounded-btn bg-accent-fill px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent-fill-hover disabled:opacity-50"
                   >
                     {sending ? "Sending…" : "Send"}
                   </button>

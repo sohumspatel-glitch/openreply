@@ -6,3 +6,5 @@ node_modules
 __tests__
 docs
 *.md
+*.local.txt
+*.local.mjs

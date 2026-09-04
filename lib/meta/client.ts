@@ -403,6 +403,77 @@ export async function sendDirectMessageWithLinkButton(
   return handleResponse(response);
 }
 
+/**
+ * One rich link card: a large image, a title, a subtitle and a tappable button.
+ *
+ * This is Meta's `generic` template, not the `button` template used above. The
+ * button template can only put buttons under a block of plain text; the generic
+ * template is the one that renders the image-topped card, which is what makes a
+ * follow-up offer look like a card rather than a bare URL. Every field except
+ * the title is optional, so a card with no image still renders correctly.
+ *
+ * Meta truncates title and subtitle at 80 characters and button titles at 20;
+ * slicing here keeps the API from rejecting the whole send over a long string.
+ */
+export async function sendDirectMessageWithCard(
+  accessToken: string,
+  instagramAccountId: string,
+  userId: string,
+  card: {
+    title: string;
+    subtitle?: string | null;
+    imageUrl?: string | null;
+    buttonTitle: string;
+    buttonUrl: string;
+    imageAspect?: string | null;
+  }
+): Promise<{ recipient_id: string; message_id: string }> {
+  const element: Record<string, unknown> = {
+    title: card.title.slice(0, 80),
+    // Tapping the card body opens the same link as the button, so a miss on
+    // the button still reaches the destination.
+    default_action: { type: "web_url", url: card.buttonUrl },
+    buttons: [
+      {
+        type: "web_url",
+        url: card.buttonUrl,
+        title: card.buttonTitle.slice(0, 20),
+      },
+    ],
+  };
+  if (card.subtitle?.trim()) element.subtitle = card.subtitle.slice(0, 80);
+  if (card.imageUrl?.trim()) element.image_url = card.imageUrl.trim();
+
+  const response = await fetch(
+    `${instagramGraphBase()}/${instagramAccountId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        recipient: { id: userId },
+        message: {
+          attachment: {
+            type: "template",
+            payload: {
+            template_type: "generic",
+            // Only "square" is worth sending; "horizontal" is already the default.
+            ...(card.imageAspect === "square"
+              ? { image_aspect_ratio: "square" }
+              : {}),
+            elements: [element],
+          },
+          },
+        },
+      }),
+    }
+  );
+
+  return handleResponse(response);
+}
+
 export async function sendCommentReply(
   accessToken: string,
   commentId: string,
@@ -491,12 +562,39 @@ export interface InstagramParticipant {
   username?: string;
 }
 
+/**
+ * A message attachment as the conversation API returns it.
+ *
+ * Every template we send — the follow-gate button, the reveal link button, the
+ * follow-up card — comes back here as `generic_template`, with `message` set to
+ * an empty string. Read the text without the attachment and an automated thread
+ * looks like a column of blank bubbles, which is exactly what it used to.
+ *
+ * Meta re-hosts `media_url` on its own CDN, so it is not the original image URL
+ * we sent and it expires.
+ */
+export interface InstagramMessageAttachment {
+  id?: string;
+  mime_type?: string;
+  name?: string;
+  file_url?: string;
+  image_data?: { url?: string; preview_url?: string };
+  video_data?: { url?: string; preview_url?: string };
+  generic_template?: {
+    title?: string;
+    subtitle?: string;
+    media_url?: string;
+    cta?: Array<{ title?: string; url?: string; type?: string }>;
+  };
+}
+
 export interface InstagramMessage {
   id: string;
   created_time?: string;
   message?: string;
   from?: InstagramParticipant;
   to?: { data: InstagramParticipant[] };
+  attachments?: { data: InstagramMessageAttachment[] };
 }
 
 export interface InstagramConversation {
@@ -538,7 +636,10 @@ export async function getConversationMessages(
   conversationId: string
 ): Promise<InstagramMessage[]> {
   const url = new URL(`${instagramGraphBase()}/${conversationId}`);
-  url.searchParams.set("fields", "messages{id,created_time,from,to,message}");
+  url.searchParams.set(
+    "fields",
+    "messages{id,created_time,from,to,message,attachments}"
+  );
   url.searchParams.set("access_token", accessToken);
 
   const response = await fetch(url.toString());
@@ -650,9 +751,125 @@ export interface FollowerCountPoint {
   delta: number;
 }
 
-// Instagram only retains ~30 days of account insights, and rejects windows
-// wider than 30 days outright. Stay just inside the limit.
-const FOLLOWER_INSIGHT_MAX_DAYS = 30;
+// Instagram serves 90 days of daily account insights, not 30. An earlier
+// comment here claimed the API "rejects windows wider than 30 days outright";
+// measured against the live endpoint, a 90-day request returns 89 points for
+// both follower_count and reach. The ceiling below is Instagram's, not ours.
+const ACCOUNT_INSIGHT_MAX_DAYS = 90;
+const FOLLOWER_INSIGHT_MAX_DAYS = ACCOUNT_INSIGHT_MAX_DAYS;
+
+/** One day of a daily account metric. */
+export interface DailyPoint {
+  /** ISO date (YYYY-MM-DD). */
+  date: string;
+  value: number;
+}
+
+function insightWindow(days: number) {
+  const span = Math.min(Math.max(days, 1), ACCOUNT_INSIGHT_MAX_DAYS);
+  const until = Math.floor(Date.now() / 1000);
+  return { since: until - (span - 1) * 86_400, until };
+}
+
+/**
+ * Daily series for one or more account metrics, keyed by metric name.
+ *
+ * Only a couple of metrics actually return a per-day series: follower_count and
+ * reach. Everything else (likes, comments, shares, saves, views, profile_views,
+ * accounts_engaged) is accepted by the API but comes back with zero values,
+ * which is why those are read through getAccountMetricTotals instead. A metric
+ * that returns nothing is omitted from the result rather than reported as a
+ * flat zero line, so callers can tell "no data" from "no activity".
+ */
+export async function getDailyAccountSeries(
+  accessToken: string,
+  instagramAccountId: string,
+  metrics: string[],
+  days: number = ACCOUNT_INSIGHT_MAX_DAYS
+): Promise<Record<string, DailyPoint[]>> {
+  if (metrics.length === 0) return {};
+  const { since, until } = insightWindow(days);
+
+  const url = new URL(`${instagramGraphBase()}/${instagramAccountId}/insights`);
+  url.searchParams.set("metric", metrics.join(","));
+  url.searchParams.set("period", "day");
+  url.searchParams.set("since", String(since));
+  url.searchParams.set("until", String(until));
+  url.searchParams.set("access_token", accessToken);
+
+  try {
+    const response = await fetch(url.toString());
+    const data = await handleResponse<{
+      data: Array<{
+        name: string;
+        values: Array<{ value: number; end_time?: string }>;
+      }>;
+    }>(response);
+
+    const out: Record<string, DailyPoint[]> = {};
+    for (const entry of data.data ?? []) {
+      const points = (entry.values ?? [])
+        .filter((v) => v.end_time)
+        .map((v) => ({ date: v.end_time!.slice(0, 10), value: v.value ?? 0 }));
+      if (points.length > 0) out[entry.name] = points;
+    }
+    return out;
+  } catch (err) {
+    if (err instanceof PermissionError) throw err;
+    console.warn(
+      "[Instagram] daily account insights unavailable:",
+      err instanceof Error ? err.message : err
+    );
+    return {};
+  }
+}
+
+/**
+ * Window totals for metrics that have no daily breakdown.
+ *
+ * These are the engagement counters — likes, comments, shares, saves, views and
+ * friends. Instagram exposes them only as a single total over the requested
+ * window (metric_type=total_value), so they can be summed for a range but never
+ * plotted as a line.
+ */
+export async function getAccountMetricTotals(
+  accessToken: string,
+  instagramAccountId: string,
+  metrics: string[],
+  days: number = ACCOUNT_INSIGHT_MAX_DAYS
+): Promise<Record<string, number>> {
+  if (metrics.length === 0) return {};
+  const { since, until } = insightWindow(days);
+
+  const url = new URL(`${instagramGraphBase()}/${instagramAccountId}/insights`);
+  url.searchParams.set("metric", metrics.join(","));
+  url.searchParams.set("metric_type", "total_value");
+  url.searchParams.set("period", "day");
+  url.searchParams.set("since", String(since));
+  url.searchParams.set("until", String(until));
+  url.searchParams.set("access_token", accessToken);
+
+  try {
+    const response = await fetch(url.toString());
+    const data = await handleResponse<{
+      data: Array<{ name: string; total_value?: { value?: number } }>;
+    }>(response);
+
+    const out: Record<string, number> = {};
+    for (const entry of data.data ?? []) {
+      const value = entry.total_value?.value;
+      if (typeof value === "number") out[entry.name] = value;
+    }
+    return out;
+  } catch (err) {
+    if (err instanceof PermissionError) throw err;
+    console.warn(
+      "[Instagram] account metric totals unavailable:",
+      err instanceof Error ? err.message : err
+    );
+    return {};
+  }
+}
 
 /**
  * Fetch the daily net follower change for an account.

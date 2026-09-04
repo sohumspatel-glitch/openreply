@@ -68,7 +68,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="panel rounded p-4 sm:p-6">
+    <section className="panel p-4 sm:p-6">
       <h2 className="text-base font-semibold text-foreground">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
@@ -111,7 +111,7 @@ export default function DiagnosticsPage() {
   }, []);
 
   if (loading && !data) {
-    return <div className="panel rounded p-8 h-64" />;
+    return <div className="panel p-8 h-64" />;
   }
 
   const workerAgeSeconds =
@@ -132,14 +132,14 @@ export default function DiagnosticsPage() {
         </div>
         <button
           onClick={() => void refreshDiagnostics()}
-          className="rounded border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground transition hover:border-border-hover"
+          className="rounded-btn border border-border-firm bg-surface px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-surface-warm"
         >
           Refresh
         </button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
-        <div className="panel rounded p-4 sm:p-5">
+        <div className="panel p-4 sm:p-5">
           <p className="text-xs font-semibold uppercase text-muted">
             Worker health
           </p>
@@ -157,7 +157,7 @@ export default function DiagnosticsPage() {
           </p>
         </div>
         {["waiting", "active", "delayed", "failed"].map((key) => (
-          <div key={key} className="panel rounded p-4 sm:p-5">
+          <div key={key} className="panel p-4 sm:p-5">
             <p className="text-xs font-semibold uppercase text-muted">
               Queue {key}
             </p>
@@ -174,13 +174,13 @@ export default function DiagnosticsPage() {
             {data.workerAlerts.map((alert) => (
               <div
                 key={`${alert.createdAt}-${alert.jobId ?? alert.message}`}
-                className="rounded border border-border bg-surface/50 p-4"
+                className="rounded-panel border border-border bg-surface-warm p-4"
               >
                 <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                   <p className="min-w-0 flex-1 break-words text-sm font-semibold text-foreground">
                     {alert.message}
                   </p>
-                  <span className="shrink-0 rounded-full bg-error/10 px-2 py-1 text-xs font-semibold text-error">
+                  <span className="shrink-0 rounded-pill bg-error-tint px-2 py-1 text-xs font-semibold text-error">
                     {alert.level}
                   </span>
                 </div>
@@ -273,7 +273,7 @@ export default function DiagnosticsPage() {
             {data.operationalEvents.map((event) => (
               <div key={event.id} className="grid gap-2 border-b border-border pb-3 last:border-0 sm:grid-cols-[140px_1fr_auto]">
                 <p className="text-xs font-semibold text-muted">{event.source}</p>
-                <p className="text-sm text-foreground">{event.message}</p>
+                <p className="min-w-0 break-words text-sm text-foreground">{event.message}</p>
                 <p className="text-xs text-muted">{formatDate(event.createdAt)}</p>
               </div>
             ))}

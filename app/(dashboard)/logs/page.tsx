@@ -107,11 +107,11 @@ export default function LogsPage() {
               key={status}
               onClick={() => handleFilterChange(status)}
               className={`
-                px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                px-3 py-1.5 rounded-chip text-xs font-medium transition-all
                 ${
                   statusFilter === status
-                    ? "bg-accent/15 text-accent border border-accent/20"
-                    : "bg-surface text-muted border border-border hover:border-border-hover hover:text-foreground"
+                    ? "bg-accent-tint text-accent-text border border-accent-rim"
+                    : "bg-surface-warm text-muted border border-border hover:border-border-firm hover:text-foreground"
                 }
               `}
             >
@@ -129,7 +129,7 @@ export default function LogsPage() {
       </div>
 
       {/* Table */}
-      <div className="panel rounded overflow-hidden">
+      <div className="panel overflow-hidden">
         {/* Six columns don't fit a phone; the table keeps its width and scrolls
             horizontally inside the panel rather than crushing every cell. */}
         <div className="overflow-x-auto">
@@ -150,7 +150,7 @@ export default function LogsPage() {
                   {[...Array(5)].map((_, i) => (
                     <tr key={i}>
                       <td colSpan={6} className="px-4 py-4 sm:px-6">
-                        <div className="h-4 bg-surface-hover rounded" />
+                        <div className="h-4 bg-surface-warm rounded-control" />
                       </td>
                     </tr>
                   ))}
@@ -165,7 +165,7 @@ export default function LogsPage() {
               )}
               {!loading &&
                 logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-surface-hover/50 transition-colors">
+                  <tr key={log.id} className="hover:bg-surface-warm/50 transition-colors">
                     <td className="px-4 py-4 sm:px-6">
                       <span className="font-medium text-foreground">
                         @{log.commenterName ?? log.commenterId.slice(0, 8)}
@@ -212,7 +212,7 @@ export default function LogsPage() {
                   setLoading(true);
                   setPage(page - 1);
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted border border-border hover:text-foreground hover:border-border-hover transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className="px-3 py-1.5 rounded-btn text-xs font-medium text-muted border border-border hover:text-foreground hover:border-border-firm transition-all disabled:opacity-30 disabled:pointer-events-none"
               >
                 Previous
               </button>
@@ -225,7 +225,7 @@ export default function LogsPage() {
                   setLoading(true);
                   setPage(page + 1);
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted border border-border hover:text-foreground hover:border-border-hover transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className="px-3 py-1.5 rounded-btn text-xs font-medium text-muted border border-border hover:text-foreground hover:border-border-firm transition-all disabled:opacity-30 disabled:pointer-events-none"
               >
                 Next
               </button>

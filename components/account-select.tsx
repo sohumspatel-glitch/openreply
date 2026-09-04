@@ -24,13 +24,15 @@ export default function AccountSelect({
 }: AccountSelectProps) {
   return (
     <label className="flex flex-col gap-2 text-sm">
-      <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-faint">
         {label}
       </span>
+      {/* The native chevron is kept: replacing it means an appearance-none field
+          plus a background-image arrow, which cannot take a theme token. */}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-w-52 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
+        className="min-w-52 rounded-btn border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground shadow-hair transition-colors hover:border-accent/40 focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       >
         {includeAll && <option value="all">All accounts</option>}
         {accounts.map((account) => (
@@ -42,4 +44,3 @@ export default function AccountSelect({
     </label>
   );
 }
-

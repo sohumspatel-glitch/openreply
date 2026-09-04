@@ -119,7 +119,7 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    return <div className="panel rounded p-8 h-64" />;
+    return <div className="panel p-8 h-64" />;
   }
 
   const accounts = data?.instagramAccounts ?? [];
@@ -136,7 +136,7 @@ export default function SettingsPage() {
         <InstagramConnectNotice />
       </Suspense>
 
-      <section className="panel rounded p-4 sm:p-6">
+      <section className="panel p-4 sm:p-6">
         <h2 className="text-base font-semibold mb-6">Instagram Connection</h2>
 
         <div className="space-y-4">
@@ -148,7 +148,7 @@ export default function SettingsPage() {
               </p>
             </div>
             <span
-              className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+              className={`px-3 py-1.5 rounded-pill text-xs font-medium ${
                 accounts.length > 0
                   ? "bg-success/10 text-success"
                   : "bg-warning/10 text-warning"
@@ -180,7 +180,7 @@ export default function SettingsPage() {
             {accounts.map((account) => (
               <div
                 key={account.id}
-                className="flex flex-col gap-3 rounded border border-border bg-surface/70 p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-panel border border-border bg-surface-warm p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <p className="text-sm font-semibold text-foreground">
@@ -197,7 +197,7 @@ export default function SettingsPage() {
                 <button
                   onClick={() => disconnectInstagram(account.id)}
                   disabled={busy === `disconnect:${account.id}`}
-                  className="inline-flex items-center justify-center rounded border border-error/20 px-4 py-2 text-sm font-medium text-error transition-all hover:border-error/40 hover:bg-error/10 disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-btn border border-error/20 px-4 py-2 text-sm font-medium text-error transition-all hover:border-error/40 hover:bg-error-tint disabled:opacity-50"
                 >
                   {busy === `disconnect:${account.id}`
                     ? "Disconnecting..."
@@ -211,14 +211,14 @@ export default function SettingsPage() {
         <div className="mt-6 pt-4 border-t border-border flex gap-3">
           <a
             href="/api/instagram/connect"
-            className="px-4 py-2 rounded text-sm font-medium transition-colors bg-accent text-white hover:bg-accent-hover"
+            className="px-4 py-2 rounded-btn text-sm font-medium transition-colors bg-accent-fill text-on-ink hover:bg-accent-fill-hover"
           >
             {accounts.length > 0 ? "Connect another account" : "Connect Instagram"}
           </a>
         </div>
       </section>
 
-      <section className="panel rounded p-4 sm:p-6">
+      <section className="panel p-4 sm:p-6">
         <h2 className="text-base font-semibold mb-6">Team</h2>
         <div className="space-y-3">
           {membersData?.members.map((member) => (
@@ -232,7 +232,7 @@ export default function SettingsPage() {
                 </p>
                 <p className="text-xs text-muted">{member.user.email}</p>
               </div>
-              <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted">
+              <span className="rounded-pill border border-border px-3 py-1 text-xs font-semibold text-muted">
                 {member.role}
               </span>
             </div>
@@ -241,14 +241,14 @@ export default function SettingsPage() {
 
         {membersData?.invitations.length ? (
           <div className="mt-6 border-t border-border pt-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-faint">
               Pending invites
             </p>
             <div className="space-y-3">
               {membersData.invitations.map((invitation) => (
                 <div
                   key={invitation.id}
-                  className="flex flex-col gap-3 rounded border border-border bg-surface/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 rounded-panel border border-border bg-surface-warm p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">
@@ -264,7 +264,7 @@ export default function SettingsPage() {
                       onClick={() =>
                         void navigator.clipboard?.writeText(invitation.inviteUrl)
                       }
-                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
+                      className="rounded-btn border border-border-firm px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-firm hover:text-foreground"
                     >
                       Copy
                     </button>
@@ -272,7 +272,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => removeInvitation(invitation.id)}
                       disabled={busy === `invite:${invitation.id}`}
-                      className="rounded-lg border border-error/20 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
+                      className="rounded-btn border border-error/20 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error-tint disabled:opacity-50"
                     >
                       Revoke
                     </button>
@@ -293,7 +293,7 @@ export default function SettingsPage() {
               value={inviteEmail}
               onChange={(event) => setInviteEmail(event.target.value)}
               placeholder="teammate@agency.com"
-              className="rounded border border-border bg-surface px-4 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
+              className="rounded-control border border-border-firm bg-surface-field px-4 py-2 text-sm text-foreground transition-colors focus:border-accent"
               required
             />
             <select
@@ -301,7 +301,7 @@ export default function SettingsPage() {
               onChange={(event) =>
                 setInviteRole(event.target.value as "ADMIN" | "MEMBER")
               }
-              className="rounded border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
+              className="rounded-control border border-border-firm bg-surface-field px-3 py-2 text-sm text-foreground transition-colors focus:border-accent"
             >
               <option value="MEMBER">Member</option>
               <option value="ADMIN">Admin</option>
@@ -309,7 +309,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={busy === "invite"}
-              className="rounded bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+              className="rounded-btn bg-accent-fill px-4 py-2 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-fill-hover disabled:opacity-50"
             >
               {busy === "invite" ? "Inviting..." : "Invite"}
             </button>
@@ -320,7 +320,7 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="panel rounded p-4 sm:p-6">
+      <section className="panel p-4 sm:p-6">
         <h2 className="text-base font-semibold mb-6">Usage</h2>
         <div className="flex items-center justify-between gap-3 py-3">
           <div>

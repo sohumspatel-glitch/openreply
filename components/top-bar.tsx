@@ -47,7 +47,7 @@ export default function TopBar({
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
         <button
           onClick={onMenuClick}
-          className="lg:hidden shrink-0 px-2.5 py-1.5 rounded border border-border text-sm text-muted hover:text-foreground"
+          className="lg:hidden shrink-0 px-2.5 py-1.5 rounded-btn border border-border-firm text-sm text-muted hover:text-foreground"
           aria-label="Toggle sidebar"
         >
           Menu
@@ -64,7 +64,7 @@ export default function TopBar({
       ) : (
         <a
           href="/api/instagram/connect"
-          className="shrink-0 whitespace-nowrap text-sm font-medium px-3 py-1.5 rounded bg-accent text-white hover:bg-accent-hover"
+          className="shrink-0 whitespace-nowrap text-sm font-medium px-3 py-1.5 rounded-btn bg-accent-fill text-on-ink hover:bg-accent-fill-hover"
         >
           {/* Full label needs more room than a 360px header has to spare. */}
           <span className="sm:hidden">Connect</span>
