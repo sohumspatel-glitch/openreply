@@ -222,13 +222,17 @@ async function postMessage(
       response
     );
   } catch (error) {
-    // Only a refusal Meta describes precisely enough to be certain nothing
-    // went out releases the claim. Everything else — above all code 1, which
-    // Meta returns on sends that DID deliver — keeps it.
-    if (
-      error instanceof MetaApiError &&
-      RELEASABLE_SEND_ERRORS.some((p) => p.test(error.message))
-    ) {
+    // Meta describing WHY it refused is Meta telling us nothing was delivered:
+    // a closed window, a missing thread, a permission problem, a rate limit.
+    // Those release the claim, because holding it would turn one transient
+    // refusal into permanent non-delivery for that person.
+    //
+    // Code 1 is the exception, and the reason this module exists. "An unknown
+    // error has occurred" comes back on sends that DID land — that is what put
+    // the same DM in one person's inbox thirteen times. An unknown outcome
+    // keeps the claim, and so does anything that is not a Meta error at all
+    // (a socket hangup, a timeout): those can equally well have been delivered.
+    if (error instanceof MetaApiError && error.code !== AMBIGUOUS_SEND_CODE) {
       await releaseOutboundClaim(instagramAccountId, destination, body.message);
     }
     throw error;
@@ -236,16 +240,11 @@ async function postMessage(
 }
 
 /**
- * Failures that mean the message was rejected before delivery, so the same
- * content may legitimately be sent again (usually in another shape). Anything
- * not on this list is treated as "might have landed".
+ * Meta's generic "An unknown error has occurred". The only response code that
+ * tells us nothing about whether the message arrived — so the only one whose
+ * claim is never released.
  */
-const RELEASABLE_SEND_ERRORS = [
-  /outside of allowed window/i,
-  /invalid for a private reply/i,
-  /requested user cannot be found/i,
-  /malformed/i,
-];
+const AMBIGUOUS_SEND_CODE = 1;
 
 export async function sendPrivateReply(
   accessToken: string,
