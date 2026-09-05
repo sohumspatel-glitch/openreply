@@ -15,6 +15,7 @@ import { prisma } from "@/lib/db/client";
 import {
   MetaApiError,
   RateLimitError,
+  RecipientUnavailableError,
   TokenExpiredError,
   getUserFollowStatus,
   sendCommentReply,
@@ -698,6 +699,18 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           errorMessage: formatError(error),
         },
       });
+
+      // The recipient's settings refuse the message and always will for this
+      // comment. Retrying is three more guaranteed-failing calls to Meta, and
+      // repeated failing calls are what an action block is built from. The
+      // comment is logged as FAILED with the reason; there is nothing to retry.
+      if (error instanceof RecipientUnavailableError) {
+        console.log(
+          `[DM Worker] ${commentId}: recipient cannot receive DMs, not retrying`
+        );
+        continue;
+      }
+
       throw error;
     }
   }

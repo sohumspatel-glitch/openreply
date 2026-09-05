@@ -88,6 +88,12 @@ vi.mock("@/lib/meta/client", () => ({
   RateLimitError: class RateLimitError extends Error {
     name = "RateLimitError";
   },
+  PermissionError: class PermissionError extends Error {
+    name = "PermissionError";
+  },
+  RecipientUnavailableError: class RecipientUnavailableError extends Error {
+    name = "RecipientUnavailableError";
+  },
 }));
 
 vi.mock("@/lib/meta/oauth", () => ({
@@ -1185,5 +1191,42 @@ describe("DM Worker — Instagram action blocks (error 368)", () => {
     // The DM is the valuable half and still goes out.
     expect(vi.mocked(meta.sendCommentReply)).not.toHaveBeenCalled();
     expect(mockSendPrivateReply).toHaveBeenCalled();
+  });
+});
+
+describe("DM Worker — recipients who cannot be messaged", () => {
+  it("logs the comment FAILED and does not retry a permanent refusal", async () => {
+    // Code 100 / subcode 2534001 means the recipient's settings refuse an
+    // unsolicited DM. Retrying is three more guaranteed-failing calls to Meta,
+    // which is what an action block is built from.
+    const meta = await import("@/lib/meta/client");
+    mockSendCooldownRemaining.mockResolvedValue(0);
+    mockSendPrivateReply.mockRejectedValue(
+      new meta.RecipientUnavailableError(
+        "The thread owner has archived or deleted this conversation"
+      )
+    );
+    const processor = getProcessor();
+
+    // Resolves rather than throwing: nothing is left to retry.
+    await expect(processor(createMockJob())).resolves.toBeUndefined();
+
+    expect(mockPrisma.dmLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "FAILED" }),
+      })
+    );
+    expect(mockStartSendCooldown).not.toHaveBeenCalled();
+  });
+
+  it("still retries an ordinary permission error", async () => {
+    const meta = await import("@/lib/meta/client");
+    mockSendCooldownRemaining.mockResolvedValue(0);
+    mockSendPrivateReply.mockRejectedValue(
+      new meta.PermissionError("Insufficient permission")
+    );
+    const processor = getProcessor();
+
+    await expect(processor(createMockJob())).rejects.toThrow();
   });
 });

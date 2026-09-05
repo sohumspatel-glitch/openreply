@@ -34,6 +34,24 @@ export class RateLimitError extends MetaApiError {
   }
 }
 
+/**
+ * Instagram will not open a conversation with this person, and never will for
+ * this comment. It surfaces as code 100 / subcode 2534001 with the message
+ * "The thread owner has archived or deleted this conversation, or the thread
+ * does not exist" — which in practice means the recipient's message controls
+ * refuse an unsolicited DM, not that anything is wrong on our side.
+ *
+ * It is permanent, so it must never be retried. Three attempts at a guaranteed
+ * refusal is three times the failing API calls, and repeated failing calls are
+ * exactly what feeds Instagram's spam signals.
+ */
+export class RecipientUnavailableError extends MetaApiError {
+  constructor(message: string, fbTraceId?: string) {
+    super(100, 2534001, fbTraceId, message);
+    this.name = "RecipientUnavailableError";
+  }
+}
+
 export class PermissionError extends MetaApiError {
   constructor(message: string, fbTraceId?: string) {
     super(100, undefined, fbTraceId, message);
@@ -132,8 +150,15 @@ async function handleResponse<T>(response: Response): Promise<T> {
       case 4:
       case 17:
         throw new RateLimitError(message, traceId);
-      case 10:
       case 100:
+        // Same code as a genuine permission problem, but this subcode is the
+        // recipient declining to be messaged. Distinguish them so the worker
+        // can stop retrying something that cannot succeed.
+        if (subcode === 2534001) {
+          throw new RecipientUnavailableError(message, traceId);
+        }
+        throw new PermissionError(message, traceId);
+      case 10:
       case 200:
         throw new PermissionError(message, traceId);
       default:
