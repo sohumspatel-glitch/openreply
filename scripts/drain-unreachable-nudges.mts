@@ -34,8 +34,16 @@ const MAX = process.argv.includes("--max")
   ? Number(process.argv[process.argv.indexOf("--max") + 1])
   : 40;
 
-/** One nudge every three minutes: 20/hour, exactly the documented budget. */
-const PACE_MS = 3 * 60 * 1000;
+/**
+ * Seconds between nudges. Three minutes by default (20/hour, the documented
+ * budget), but a short backlog can go faster without approaching the cap —
+ * ten replies is ten replies whether they take three minutes or thirty, and
+ * the action block came from unbounded volume, not from cadence.
+ */
+const PACE_MS =
+  (process.argv.includes("--pace")
+    ? Number(process.argv[process.argv.indexOf("--pace") + 1])
+    : 180) * 1000;
 
 const { prisma } = await import("../lib/db/client");
 const { decryptToken } = await import("../lib/meta/oauth");
@@ -87,6 +95,7 @@ if (!apply) {
 const redis = getRedisConnection();
 const key = `rate:comment:${stuck[0]?.automation.instagramAccount?.instagramId}`;
 const spent = Number((await redis.get(key)) ?? 0);
+console.log(`comment budget spent this hour: ${spent}/20`);
 if (spent >= 20) {
   const ttl = await redis.ttl(key);
   console.log(`\nbudget spent (${spent}/20). Waiting ${ttl}s for the window to reset.`);

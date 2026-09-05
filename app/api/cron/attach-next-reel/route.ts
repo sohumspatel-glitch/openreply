@@ -17,6 +17,28 @@ function isReel(media: InstagramMedia): boolean {
   return media.media_product_type === "REELS";
 }
 
+function isCarousel(media: InstagramMedia): boolean {
+  return (media as { media_type?: string }).media_type === "CAROUSEL_ALBUM";
+}
+
+/**
+ * The keyword a carousel's caption asks for.
+ *
+ * Carousels cannot be bound by "the earliest one posted after the campaign was
+ * created" the way reels are. A scheduled run of ten posts means several are
+ * unbound at once, and time-ordering would eventually attach a campaign to the
+ * wrong post — which sends the wrong guide to everybody who comments.
+ *
+ * The caption is unambiguous instead: the publisher refuses any caption that
+ * does not open `Comment "KEYWORD"`, and each campaign owns its keyword.
+ */
+function captionKeyword(media: InstagramMedia): string | null {
+  const m = ((media as { caption?: string }).caption ?? "").match(
+    /^Comment\s+"([^"]+)"/i
+  );
+  return m ? m[1].toLowerCase() : null;
+}
+
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET || process.env.NEXTAUTH_SECRET;
@@ -54,6 +76,7 @@ export async function GET(request: NextRequest) {
     if (!account?.accessToken) continue;
 
     let reels: InstagramMedia[];
+    let carousels: InstagramMedia[];
     try {
       const token = decryptToken(account.accessToken);
       const media = await getUserMedia(token, 25);
@@ -63,6 +86,7 @@ export async function GET(request: NextRequest) {
           (a, b) =>
             new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
+      carousels = media.filter(isCarousel);
     } catch (err) {
       failures.push(account.id);
       console.error("[attach-next-reel] media fetch failed", account.id, err);
@@ -70,18 +94,33 @@ export async function GET(request: NextRequest) {
     }
 
     for (const automation of automations) {
+      // A carousel is matched on its caption keyword, a reel on its timestamp.
+      // Carousel first: a campaign whose keyword is live on a published
+      // carousel should never be attached to an unrelated reel.
+      const match = carousels.find((c) => {
+        const keyword = captionKeyword(c);
+        return (
+          keyword !== null &&
+          new Date(c.timestamp) > automation.createdAt &&
+          automation.keywords.some((k) => k.toLowerCase() === keyword)
+        );
+      });
+
       // The "next" reel = the earliest one posted after the campaign was created.
-      const nextReel = reels.find(
-        (reel) => new Date(reel.timestamp) > automation.createdAt
-      );
-      if (!nextReel) continue;
+      const target =
+        match ??
+        reels.find((reel) => new Date(reel.timestamp) > automation.createdAt);
+      if (!target) continue;
 
       await prisma.automation.update({
         where: { id: automation.id },
         data: {
-          postId: nextReel.id,
-          postUrl: nextReel.permalink ?? null,
+          postId: target.id,
+          postUrl: target.permalink ?? null,
           pendingNextReel: false,
+          // A campaign bound to a live post should be answering comments. Reels
+          // were activated by hand before; a ten-day scheduled run cannot be.
+          isActive: true,
         },
       });
       bound += 1;
