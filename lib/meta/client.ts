@@ -1,4 +1,5 @@
 import { getMetaGraphApiVersion, requireEnv } from "@/lib/env";
+import { claimOutboundSend, releaseOutboundClaim } from "./outbound-guard";
 
 function instagramGraphBase() {
   return `https://graph.instagram.com/${getMetaGraphApiVersion()}`;
@@ -169,28 +170,93 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
+/**
+ * The one place an Instagram message leaves this process.
+ *
+ * Every send in this file routes through here so the outbound guard cannot be
+ * bypassed by adding another send function later — the guard is not a rule
+ * somebody has to remember, it is the only road out. See
+ * ./outbound-guard.ts for why counting delivered messages beats reasoning
+ * about whether we meant to deliver them.
+ *
+ * The claim is taken immediately before the POST and released only when the
+ * failure proves nothing was delivered. A network error, a timeout, or Meta's
+ * generic code 1 all leave the claim standing, because any of them can come
+ * back from a message that actually arrived.
+ */
+async function postMessage(
+  accessToken: string,
+  instagramAccountId: string,
+  body: {
+    recipient: { comment_id?: string; id?: string };
+    message: unknown;
+  }
+): Promise<{ recipient_id: string; message_id: string }> {
+  const destination = body.recipient.comment_id
+    ? `comment:${body.recipient.comment_id}`
+    : `user:${body.recipient.id}`;
+
+  await claimOutboundSend(instagramAccountId, destination, body.message);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${instagramGraphBase()}/${instagramAccountId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(body),
+      }
+    );
+  } catch (error) {
+    // The request never got an answer. It may still have been delivered, so
+    // the claim stands and this content will not be sent again.
+    throw error;
+  }
+
+  try {
+    return await handleResponse<{ recipient_id: string; message_id: string }>(
+      response
+    );
+  } catch (error) {
+    // Only a refusal Meta describes precisely enough to be certain nothing
+    // went out releases the claim. Everything else — above all code 1, which
+    // Meta returns on sends that DID deliver — keeps it.
+    if (
+      error instanceof MetaApiError &&
+      RELEASABLE_SEND_ERRORS.some((p) => p.test(error.message))
+    ) {
+      await releaseOutboundClaim(instagramAccountId, destination, body.message);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Failures that mean the message was rejected before delivery, so the same
+ * content may legitimately be sent again (usually in another shape). Anything
+ * not on this list is treated as "might have landed".
+ */
+const RELEASABLE_SEND_ERRORS = [
+  /outside of allowed window/i,
+  /invalid for a private reply/i,
+  /requested user cannot be found/i,
+  /malformed/i,
+];
+
 export async function sendPrivateReply(
   accessToken: string,
   instagramAccountId: string,
   commentId: string,
   message: string
 ): Promise<{ recipient_id: string; message_id: string }> {
-  const response = await fetch(
-    `${instagramGraphBase()}/${instagramAccountId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+  return postMessage(accessToken, instagramAccountId, ({
         recipient: { comment_id: commentId },
         message: { text: message },
-      }),
-    }
-  );
-
-  return handleResponse(response);
+      }));
 }
 
 /**
@@ -207,15 +273,7 @@ export async function sendPrivateReplyWithButton(
   buttonTitle: string,
   payload: string
 ): Promise<{ recipient_id: string; message_id: string }> {
-  const response = await fetch(
-    `${instagramGraphBase()}/${instagramAccountId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+  return postMessage(accessToken, instagramAccountId, ({
         recipient: { comment_id: commentId },
         message: {
           attachment: {
@@ -230,11 +288,7 @@ export async function sendPrivateReplyWithButton(
             },
           },
         },
-      }),
-    }
-  );
-
-  return handleResponse(response);
+      }));
 }
 
 /**
@@ -250,15 +304,7 @@ export async function sendDirectMessageWithButton(
   buttonTitle: string,
   payload: string
 ): Promise<{ recipient_id: string; message_id: string }> {
-  const response = await fetch(
-    `${instagramGraphBase()}/${instagramAccountId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+  return postMessage(accessToken, instagramAccountId, ({
         recipient: { id: userId },
         message: {
           attachment: {
@@ -272,11 +318,7 @@ export async function sendDirectMessageWithButton(
             },
           },
         },
-      }),
-    }
-  );
-
-  return handleResponse(response);
+      }));
 }
 
 /**
@@ -335,15 +377,7 @@ export async function sendPrivateReplyWithLinkButton(
   text: string,
   buttons: LinkButton[]
 ): Promise<{ recipient_id: string; message_id: string }> {
-  const response = await fetch(
-    `${instagramGraphBase()}/${instagramAccountId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+  return postMessage(accessToken, instagramAccountId, ({
         recipient: { comment_id: commentId },
         message: {
           attachment: {
@@ -355,11 +389,7 @@ export async function sendPrivateReplyWithLinkButton(
             },
           },
         },
-      }),
-    }
-  );
-
-  return handleResponse(response);
+      }));
 }
 
 /**
@@ -372,22 +402,10 @@ export async function sendDirectMessage(
   userId: string,
   message: string
 ): Promise<{ recipient_id: string; message_id: string }> {
-  const response = await fetch(
-    `${instagramGraphBase()}/${instagramAccountId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+  return postMessage(accessToken, instagramAccountId, ({
         recipient: { id: userId },
         message: { text: message },
-      }),
-    }
-  );
-
-  return handleResponse(response);
+      }));
 }
 
 /**
@@ -401,15 +419,7 @@ export async function sendDirectMessageWithLinkButton(
   text: string,
   buttons: LinkButton[]
 ): Promise<{ recipient_id: string; message_id: string }> {
-  const response = await fetch(
-    `${instagramGraphBase()}/${instagramAccountId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+  return postMessage(accessToken, instagramAccountId, ({
         recipient: { id: userId },
         message: {
           attachment: {
@@ -421,11 +431,7 @@ export async function sendDirectMessageWithLinkButton(
             },
           },
         },
-      }),
-    }
-  );
-
-  return handleResponse(response);
+      }));
 }
 
 /**
@@ -469,15 +475,7 @@ export async function sendDirectMessageWithCard(
   if (card.subtitle?.trim()) element.subtitle = card.subtitle.slice(0, 80);
   if (card.imageUrl?.trim()) element.image_url = card.imageUrl.trim();
 
-  const response = await fetch(
-    `${instagramGraphBase()}/${instagramAccountId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+  return postMessage(accessToken, instagramAccountId, ({
         recipient: { id: userId },
         message: {
           attachment: {
@@ -492,11 +490,7 @@ export async function sendDirectMessageWithCard(
           },
           },
         },
-      }),
-    }
-  );
-
-  return handleResponse(response);
+      }));
 }
 
 export async function sendCommentReply(

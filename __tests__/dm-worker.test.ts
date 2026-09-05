@@ -29,6 +29,7 @@ const {
       findFirst: vi.fn(),
       upsert: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       create: vi.fn(),
     },
     instagramAccount: {
@@ -147,6 +148,19 @@ vi.mock("bullmq", () => {
 
 import { createDMWorker } from "../lib/queue/dm-worker";
 
+// The outbound guard sits in front of every send and fails closed, so a test
+// that exercises a send needs a Redis it can talk to. This mock is permissive
+// by design: these files test message shape, not the guard. The guard's own
+// behaviour is covered in __tests__/outbound-guard.test.ts.
+vi.mock("@/lib/meta/outbound-guard", () => ({
+  claimOutboundSend: vi.fn(async () => undefined),
+  releaseOutboundClaim: vi.fn(async () => undefined),
+  outboundCountFor: vi.fn(async () => 0),
+  OutboundBlockedError: class OutboundBlockedError extends Error {},
+  OUTBOUND_LIMITS: { MAX_PER_DESTINATION: 3, DUPLICATE_TTL_SEC: 604800 },
+}));
+
+
 const usagePeriodStart = new Date("2026-05-01T00:00:00.000Z");
 
 const mockAutomation = {
@@ -242,6 +256,7 @@ beforeEach(() => {
   );
   mockPrisma.dmLog.upsert.mockResolvedValue({});
   mockPrisma.dmLog.update.mockResolvedValue({});
+  mockPrisma.dmLog.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.instagramAccount.findUnique.mockResolvedValue({
     workspaceId: "workspace_123",
   });
@@ -505,15 +520,20 @@ describe("DM Worker — Full Pipeline", () => {
       "workspace_123",
       usagePeriodStart
     );
-    expect(mockPrisma.dmLog.update).toHaveBeenCalledWith({
+    // updateMany with a "not already SENT" filter, not update: a second job
+    // holding the same comment must never be able to mark a delivered DM
+    // failed, because the sweep would then send it again. Forever.
+    expect(mockPrisma.dmLog.updateMany).toHaveBeenCalledWith({
       where: {
-        automationId_commentId: {
-          automationId: "auto_789",
-          commentId: "comment_555",
-        },
+        automationId: "auto_789",
+        commentId: "comment_555",
+        status: { not: "SENT" },
       },
       data: expect.objectContaining({
         status: "FAILED",
+        // Accumulates. Setting it from job.attemptsMade reset the counter to 1
+        // on every sweep, so the retry cap could never be reached.
+        attempts: { increment: 1 },
         errorMessage: "API Error",
       }),
     });
@@ -918,8 +938,9 @@ describe("DM Worker — one private reply per comment", () => {
     // A text retry on the same comment would fail identically and overwrite the
     // real reason, so it must not be attempted.
     expect(mockSendPrivateReply).not.toHaveBeenCalled();
-    expect(mockPrisma.dmLog.update).toHaveBeenCalledWith(
+    expect(mockPrisma.dmLog.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: expect.objectContaining({ status: { not: "SENT" } }),
         data: expect.objectContaining({
           status: "FAILED",
           errorMessage: "The comment is invalid for a private reply",
@@ -1211,8 +1232,9 @@ describe("DM Worker — recipients who cannot be messaged", () => {
     // Resolves rather than throwing: nothing is left to retry.
     await expect(processor(createMockJob())).resolves.toBeUndefined();
 
-    expect(mockPrisma.dmLog.update).toHaveBeenCalledWith(
+    expect(mockPrisma.dmLog.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: expect.objectContaining({ status: { not: "SENT" } }),
         data: expect.objectContaining({ status: "FAILED" }),
       })
     );

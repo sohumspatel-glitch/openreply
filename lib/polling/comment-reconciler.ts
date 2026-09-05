@@ -221,6 +221,14 @@ async function sweepCampaign(
 
   const queue = getDMQueue();
 
+  // One job per comment per sweep, across every media id this campaign covers.
+  // A boosted post carries the original id plus one id per ad copy, and the
+  // same comment comes back under several of them — which used to enqueue the
+  // same comment two or three times in a single pass. Those duplicates then ran
+  // concurrently, raced each other on the same DmLog row, and delivered the
+  // same DM to the same person two or three times per sweep.
+  const enqueuedThisSweep = new Set<string>();
+
   for (const mediaId of mediaIds) {
     let comments: InstagramComment[];
     try {
@@ -281,6 +289,8 @@ async function sweepCampaign(
       .slice(0, MAX_NEW_PER_SWEEP);
 
     for (const c of fresh) {
+      if (enqueuedThisSweep.has(c.id)) continue;
+      enqueuedThisSweep.add(c.id);
       // No deterministic jobId here: a retained completed/failed job from an
       // earlier sweep would otherwise be treated as a duplicate and silently
       // drop this add, so the comment would never be retried. Dedup is handled

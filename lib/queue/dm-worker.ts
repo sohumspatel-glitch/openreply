@@ -69,15 +69,21 @@ function formatError(error: unknown): string {
   return "Unknown error";
 }
 
-// Meta rejections that a plain-text retry cannot fix: the send was refused for
-// the conversation, not for the button template. Retrying as text just burns
-// the attempt and — worse — overwrites the real error with a misleading one
-// ("invalid for a private reply", because the first attempt already used up the
-// comment's single allowed private reply).
-const NON_TEMPLATE_REJECTIONS = [
-  /outside of allowed window/i,
-  /invalid for a private reply/i,
-  /requested user cannot be found/i,
+// Errors that actually mean "this button template is malformed, plain text
+// would work". An allow-list, not a deny-list: this used to return true for
+// anything it did not recognise, which meant Meta's generic code 1 ("An unknown
+// error has occurred") was read as a template problem and the same content went
+// out a second time as text. Meta returns code 1 on sends that DID deliver, so
+// every one of those was a duplicate message to a real person.
+//
+// If we cannot tell what went wrong, we do not send again. A missed fallback
+// costs one link; a wrong fallback costs the recipient's goodwill.
+const TEMPLATE_REJECTIONS = [
+  /template/i,
+  /attachment/i,
+  /elements/i,
+  /button/i,
+  /payload/i,
 ];
 
 function isTemplateRejection(error: unknown): boolean {
@@ -85,7 +91,7 @@ function isTemplateRejection(error: unknown): boolean {
     return false;
   }
   const message = error instanceof Error ? error.message : "";
-  return !NON_TEMPLATE_REJECTIONS.some((pattern) => pattern.test(message));
+  return TEMPLATE_REJECTIONS.some((pattern) => pattern.test(message));
 }
 
 type WorkerTrackedLink = {
@@ -359,7 +365,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commentId,
           matchedKeyword: matchResult.matchedKeyword,
           status: "PENDING",
-          attempts: job.attemptsMade + 1,
+          attempts: 1,
         },
       });
     } else if (needsDm) {
@@ -369,7 +375,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         },
         data: {
           status: "PENDING",
-          attempts: job.attemptsMade + 1,
+          attempts: { increment: 1 },
           matchedKeyword: matchResult.matchedKeyword,
           errorMessage: null,
         },
@@ -487,16 +493,15 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         automation.workspaceId,
         usage.periodStart
       );
-      await prisma.dmLog.update({
+      await prisma.dmLog.updateMany({
         where: {
-          automationId_commentId: {
-            automationId: automation.id,
-            commentId,
-          },
+          automationId: automation.id,
+          commentId,
+          status: { not: "SENT" },
         },
         data: {
           status: "FAILED",
-          attempts: job.attemptsMade + 1,
+          attempts: { increment: 1 },
           errorMessage: formatError(error),
         },
       });
@@ -690,23 +695,26 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         usage.periodStart
       );
 
-      await prisma.dmLog.update({
+      // updateMany, guarded on "not already SENT", rather than update: two jobs
+      // can hold the same comment (the sweep enqueues one per media id, and a
+      // boosted post has several). When one of them delivers and the other
+      // fails, an unguarded write flips a delivered row back to FAILED — which
+      // makes the sweep eligible again, forever, and the recipient gets the
+      // same DM every five minutes. A delivered DM is final.
+      //
+      // attempts increments rather than being set from job.attemptsMade: every
+      // sweep hands the worker a brand new job whose attemptsMade starts at
+      // zero, so setting it wrote 1 on every pass and MAX_DM_ATTEMPTS could
+      // never be reached.
+      await prisma.dmLog.updateMany({
         where: {
-          automationId_commentId: {
-            automationId: automation.id,
-            commentId,
-          },
+          automationId: automation.id,
+          commentId,
+          status: { not: "SENT" },
         },
         data: {
           status: "FAILED",
-          // Instagram would not open a conversation this time. The polling
-          // sweep re-attempts these, and each sweep is a brand new job whose
-          // attemptsMade restarts at zero — so accumulate here instead, or the
-          // sweep's retry cap could never be reached.
-          attempts:
-            error instanceof RecipientUnavailableError
-              ? { increment: 1 }
-              : job.attemptsMade + 1,
+          attempts: { increment: 1 },
           errorMessage: formatError(error),
         },
       });
@@ -1347,12 +1355,13 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
           ...logBase,
           commenterName,
           status: "FAILED",
-          attempts: job.attemptsMade + 1,
+          // A create has no prior value to increment.
+          attempts: 1,
           errorMessage: formatError(error),
         },
         update: {
           status: "FAILED",
-          attempts: job.attemptsMade + 1,
+          attempts: { increment: 1 },
           errorMessage: formatError(error),
         },
       });

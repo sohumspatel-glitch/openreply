@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sendDirectMessageWithCard } from "../lib/meta/client";
 
+// The outbound guard sits in front of every send and fails closed, so a test
+// that exercises a send needs a Redis it can talk to. This mock is permissive
+// by design: these files test message shape, not the guard. The guard's own
+// behaviour is covered in __tests__/outbound-guard.test.ts.
+vi.mock("@/lib/meta/outbound-guard", () => ({
+  claimOutboundSend: vi.fn(async () => undefined),
+  releaseOutboundClaim: vi.fn(async () => undefined),
+  outboundCountFor: vi.fn(async () => 0),
+  OutboundBlockedError: class OutboundBlockedError extends Error {},
+  OUTBOUND_LIMITS: { MAX_PER_DESTINATION: 3, DUPLICATE_TTL_SEC: 604800 },
+}));
+
+
 /**
  * The follow-up card is Meta's `generic` template, not the `button` template
  * used elsewhere. Getting the payload shape wrong fails the whole send, so
