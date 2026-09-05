@@ -52,6 +52,10 @@ const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
 // their links, so every reveal-side query filters to REVEAL_LINK and the
 // follow-up to FOLLOWUP_LINK. Without this the follow-up's link would show up
 // as a third button on the reveal message.
+// Give Instagram the sweep's full retry budget before telling the commenter
+// it will not work, so a recipient who becomes reachable is never nudged.
+const UNREACHABLE_NUDGE_AFTER_ATTEMPTS = 5;
+
 const REVEAL_LINK = "REVEAL";
 const FOLLOWUP_LINK = "FOLLOWUP";
 
@@ -715,11 +719,73 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         console.log(
           `[DM Worker] ${commentId}: Instagram would not open a thread; leaving it to the sweep`
         );
+        await postUnreachableNudge({
+          automation,
+          commentId,
+          accessToken,
+          instagramAccountId,
+        });
         continue;
       }
 
       throw error;
     }
+  }
+}
+
+/**
+ * Tell a commenter we could not DM them, and how to fix it.
+ *
+ * When Instagram refuses to open a thread, the commenter still sees our public
+ * reply telling them to check their DMs, for a message that does not exist.
+ * That is worse than silence. An INBOUND DM from them opens the thread a
+ * private reply could not, and this campaign already answers inbound DMs on the
+ * same keyword, so pointing them at that recovers the whole flow.
+ *
+ * Posted only once the sweep has exhausted its retries, so Instagram gets every
+ * chance to relent first, and only once per comment.
+ */
+async function postUnreachableNudge(args: {
+  automation: {
+    id: string;
+    keywords: string[];
+    dmTriggerEnabled: boolean;
+    publicReplyEnabled: boolean;
+  };
+  commentId: string;
+  accessToken: string;
+  instagramAccountId: string;
+}): Promise<void> {
+  const { automation, commentId, accessToken } = args;
+
+  // Without the DM trigger there is nothing for them to trigger, so the nudge
+  // would be a dead end. Without a public reply there is no comment surface.
+  if (!automation.dmTriggerEnabled || !automation.publicReplyEnabled) return;
+
+  const keyword = automation.keywords[0];
+  if (!keyword) return;
+
+  const log = await prisma.dmLog.findUnique({
+    where: { automationId_commentId: { automationId: automation.id, commentId } },
+    select: { attempts: true, fallbackReplySentAt: true },
+  });
+  if (!log || log.fallbackReplySentAt) return;
+  if (log.attempts < UNREACHABLE_NUDGE_AFTER_ATTEMPTS) return;
+
+  if (!(await reserveCommentReplySlot(args.instagramAccountId))) return;
+
+  try {
+    await sendCommentReply(
+      accessToken,
+      commentId,
+      `instagram won't let me DM you first — send me "${keyword}" in a DM and it'll come straight through 🙌`
+    );
+    await prisma.dmLog.update({
+      where: { automationId_commentId: { automationId: automation.id, commentId } },
+      data: { fallbackReplySentAt: new Date() },
+    });
+  } catch (error) {
+    console.log("[DM Worker] Unreachable nudge failed:", formatError(error));
   }
 }
 

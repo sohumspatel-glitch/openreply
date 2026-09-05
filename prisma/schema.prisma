@@ -253,6 +253,12 @@ model DmLog {
   publicReplySentAt DateTime?
   publicReplyError  String?
 
+  /// When Instagram refused to open a DM thread for this commenter, we post a
+  /// second public reply asking them to DM the keyword instead — an inbound DM
+  /// opens the thread the private reply could not. Set once, so the nudge is
+  /// never posted twice under the same comment.
+  fallbackReplySentAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

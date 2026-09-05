@@ -1230,3 +1230,69 @@ describe("DM Worker — recipients who cannot be messaged", () => {
     await expect(processor(createMockJob())).rejects.toThrow();
   });
 });
+
+describe("DM Worker — the commenter we could not reach", () => {
+  const meta = () => import("@/lib/meta/client");
+
+  // The nudge only makes sense on a campaign that has both surfaces: a comment
+  // to speak in, and a DM trigger for them to trigger.
+  const reachableCampaign = {
+    ...mockAutomation,
+    publicReplyEnabled: true,
+    publicReplyMessages: ["Sent. Check your DMs."],
+    dmTriggerEnabled: true,
+  };
+
+  const nudgesFrom = (calls: unknown[][]) =>
+    calls.filter((c) => String(c[2]).includes("in a DM"));
+
+  beforeEach(async () => {
+    const m = await meta();
+    vi.mocked(m.sendCommentReply).mockClear();
+    mockSendCooldownRemaining.mockResolvedValue(0);
+    mockReserveCommentReplySlot.mockResolvedValue(true);
+    mockPrisma.automation.findMany.mockResolvedValue([reachableCampaign]);
+    mockSendPrivateReply.mockRejectedValue(
+      new (await meta()).RecipientUnavailableError("thread does not exist")
+    );
+  });
+
+  it("nudges them to DM the keyword once the sweep has given up", async () => {
+    mockPrisma.dmLog.findUnique.mockResolvedValue({
+      attempts: 5,
+      fallbackReplySentAt: null,
+    });
+
+    await getProcessor()(createMockJob());
+
+    const m = await meta();
+    const nudges = nudgesFrom(vi.mocked(m.sendCommentReply).mock.calls);
+    expect(nudges).toHaveLength(1);
+    // The keyword is what makes the nudge actionable.
+    expect(String(nudges[0][2])).toContain("LINK");
+  });
+
+  it("stays quiet while retries remain", async () => {
+    mockPrisma.dmLog.findUnique.mockResolvedValue({
+      attempts: 2,
+      fallbackReplySentAt: null,
+    });
+
+    await getProcessor()(createMockJob());
+
+    const m = await meta();
+    expect(nudgesFrom(vi.mocked(m.sendCommentReply).mock.calls)).toHaveLength(0);
+  });
+
+  it("never posts the nudge twice under one comment", async () => {
+    mockPrisma.dmLog.findUnique.mockResolvedValue({
+      attempts: 9,
+      fallbackReplySentAt: new Date(),
+    });
+
+    await getProcessor()(createMockJob());
+
+    const m = await meta();
+    expect(nudgesFrom(vi.mocked(m.sendCommentReply).mock.calls)).toHaveLength(0);
+  });
+});
