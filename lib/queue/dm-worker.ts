@@ -695,18 +695,25 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         },
         data: {
           status: "FAILED",
-          attempts: job.attemptsMade + 1,
+          // Instagram would not open a conversation this time. The polling
+          // sweep re-attempts these, and each sweep is a brand new job whose
+          // attemptsMade restarts at zero — so accumulate here instead, or the
+          // sweep's retry cap could never be reached.
+          attempts:
+            error instanceof RecipientUnavailableError
+              ? { increment: 1 }
+              : job.attemptsMade + 1,
           errorMessage: formatError(error),
         },
       });
 
-      // The recipient's settings refuse the message and always will for this
-      // comment. Retrying is three more guaranteed-failing calls to Meta, and
-      // repeated failing calls are what an action block is built from. The
-      // comment is logged as FAILED with the reason; there is nothing to retry.
+      // Instagram refused to open the conversation. Do not burn this job's
+      // three fast retries on it: the private-reply window stays open for 7
+      // days, and the 5-minute reconciler sweep will re-attempt on a far
+      // gentler cadence, bounded by MAX_DM_ATTEMPTS.
       if (error instanceof RecipientUnavailableError) {
         console.log(
-          `[DM Worker] ${commentId}: recipient cannot receive DMs, not retrying`
+          `[DM Worker] ${commentId}: Instagram would not open a thread; leaving it to the sweep`
         );
         continue;
       }

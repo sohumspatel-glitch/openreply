@@ -42,6 +42,18 @@ const LOOKBACK_HOURS = Number(process.env.COMMENT_POLL_LOOKBACK_HOURS ?? 72);
 // Hard cap on how many new comments a single campaign can enqueue per sweep, so
 // a viral post drains gradually instead of bursting into the comment API.
 const MAX_NEW_PER_SWEEP = Number(process.env.COMMENT_POLL_MAX_PER_SWEEP ?? 30);
+
+/**
+ * How many times to re-attempt a comment whose DM failed.
+ *
+ * Instagram accepts a private reply for 7 days after the comment, so a failure
+ * is rarely permanent — a recipient who cannot be opened now often can be
+ * later. But the sweep runs every 5 minutes, and retrying for the full 72-hour
+ * lookback would be hundreds of failing calls per person, which is precisely
+ * what an action block is built from. Five attempts spreads recovery across
+ * roughly half an hour and then stops.
+ */
+const MAX_DM_ATTEMPTS = Number(process.env.COMMENT_POLL_MAX_DM_ATTEMPTS ?? 5);
 // For "any post" campaigns, how many recent posts to scan.
 const RECENT_MEDIA_LIMIT = 10;
 
@@ -61,6 +73,47 @@ function errMessage(error: unknown): string {
 }
 
 /** One reconciliation pass across every active campaign. */
+
+/** What this campaign has already recorded for one comment. */
+export interface CommentAttemptState {
+  status: string;
+  publicReplySentAt: Date | null;
+  attempts: number;
+}
+
+/**
+ * Should the sweep act on this comment?
+ *
+ * The rule that matters: the DM is the campaign. A public reply under the
+ * comment is not delivery, and because we post that reply BEFORE sending the
+ * DM, treating it as completion marked every failed DM as done forever. That
+ * is the bug this encodes against.
+ */
+export function shouldAct(args: {
+  ownerReplied: boolean;
+  publicReplyEnabled: boolean;
+  log: CommentAttemptState | undefined;
+  maxAttempts?: number;
+}): boolean {
+  const { ownerReplied, publicReplyEnabled, log } = args;
+  const maxAttempts = args.maxAttempts ?? MAX_DM_ATTEMPTS;
+
+  // Delivered: the DM landed, plus the public reply if this campaign posts one.
+  if (log && log.status === "SENT") {
+    return publicReplyEnabled ? log.publicReplySentAt === null : false;
+  }
+
+  // A reply from the account with nothing of ours behind it is a human
+  // answering by hand. Leave it alone.
+  if (ownerReplied && !log) return false;
+
+  // Our reply landed but the DM did not. Retry, bounded — Instagram accepts a
+  // private reply for 7 days, so a refusal now is often not a refusal later.
+  if (log) return log.attempts < maxAttempts;
+
+  return !ownerReplied;
+}
+
 export async function reconcileComments(): Promise<void> {
   const automations = await prisma.automation.findMany({
     where: { isActive: true },
@@ -190,38 +243,40 @@ async function sweepCampaign(
       if (!matched) return false;
       stat.matched += 1;
 
-      const ownerReplied = (c.replies?.data ?? []).some(
-        (r) => r.from?.id === account.instagramId
-      );
-      if (ownerReplied) {
-        stat.alreadyReplied += 1;
-        return false;
-      }
       return true;
     });
     if (needsAction.length === 0) continue;
 
-    // Second guard against races: skip comments this campaign has already fully
-    // handled. "Fully handled" depends on the campaign: if it posts a public
-    // reply, the completion signal is publicReplySentAt (a DM alone is not
-    // enough — the reply still has to land); otherwise a SENT DM is enough. This
-    // is what lets a comment whose DM sent but whose public reply failed come
-    // back and retry the reply.
-    const handled = await prisma.dmLog.findMany({
+    // What this campaign has already done for each of these comments. Read
+    // before the owner-reply guard because a public reply we posted ourselves
+    // must not be allowed to mask a DM that never landed.
+    const logs = await prisma.dmLog.findMany({
       where: {
         automationId: automation.id,
         commentId: { in: needsAction.map((c) => c.id) },
-        ...(automation.publicReplyEnabled
-          ? { publicReplySentAt: { not: null } }
-          : { status: "SENT" }),
       },
-      select: { commentId: true },
+      select: {
+        commentId: true,
+        status: true,
+        publicReplySentAt: true,
+        attempts: true,
+      },
     });
-    const handledSet = new Set(handled.map((h) => h.commentId));
+    const logByComment = new Map(logs.map((l) => [l.commentId, l]));
 
     // Oldest first, so whoever commented earliest gets answered first, capped.
     const fresh = needsAction
-      .filter((c) => !handledSet.has(c.id))
+      .filter((c) => {
+        const act = shouldAct({
+          ownerReplied: (c.replies?.data ?? []).some(
+            (r) => r.from?.id === account.instagramId
+          ),
+          publicReplyEnabled: automation.publicReplyEnabled,
+          log: logByComment.get(c.id),
+        });
+        if (!act) stat.alreadyReplied += 1;
+        return act;
+      })
       .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
       .slice(0, MAX_NEW_PER_SWEEP);
 
