@@ -44,12 +44,15 @@ const { getRedisConnection } = await import("../lib/queue/client");
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+// Selected by outcome, not by error text. Filtering on "2534001" missed people
+// whose single attempt failed some other way — a stale comment id, a scope
+// error — who are just as unreachable and just as owed an explanation. What
+// matters is: nothing was delivered, and nobody has told them why.
 const stuck = await prisma.dmLog.findMany({
   where: {
-    status: "FAILED",
     dmSentAt: null,
     fallbackReplySentAt: null,
-    errorMessage: { contains: "2534001" },
+    automation: { isActive: true },
   },
   select: {
     id: true,
