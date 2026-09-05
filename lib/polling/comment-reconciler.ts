@@ -44,16 +44,34 @@ const LOOKBACK_HOURS = Number(process.env.COMMENT_POLL_LOOKBACK_HOURS ?? 72);
 const MAX_NEW_PER_SWEEP = Number(process.env.COMMENT_POLL_MAX_PER_SWEEP ?? 30);
 
 /**
- * How many times to re-attempt a comment whose DM failed.
+ * How many times to attempt the DM for one comment. One. Not a retry budget —
+ * a statement about what Instagram allows.
  *
- * Instagram accepts a private reply for 7 days after the comment, so a failure
- * is rarely permanent — a recipient who cannot be opened now often can be
- * later. But the sweep runs every 5 minutes, and retrying for the full 72-hour
- * lookback would be hundreds of failing calls per person, which is precisely
- * what an action block is built from. Five attempts spreads recovery across
- * roughly half an hour and then stops.
+ * The window for a private reply is 7 days, and the earlier version of this
+ * constant read that as "failure is rarely permanent, so retry for a while".
+ * That confused the window with the budget. Instagram allows exactly ONE
+ * private reply per comment. The first attempt spends it whether it succeeds,
+ * fails, or fails ambiguously; every attempt after that comes back as code 100
+ * subcode 2534001, which reads like "this person cannot be reached" and is
+ * actually "you already used your one shot on them".
+ *
+ * The numbers from 2026-09-05 are unambiguous. Of 107 deliveries, 95 landed on
+ * the first attempt. Of every 2534001 refusal, NOT ONE was a first attempt —
+ * the earliest was attempt four. Retrying never recovered a single person; it
+ * only converted people we had probably already reached into people we had
+ * definitely annoyed, because Meta returns code 1 on sends that did deliver
+ * (216 of those in 24 hours) and we read each one as a reason to send again.
+ *
+ * For somebody with no DM history the private reply is the only door, so
+ * burning it costs the whole contact. Someone with an existing thread survived
+ * our retries only because they had a second door. That asymmetry is the whole
+ * reason "people who never messaged me get nothing" looked like a platform
+ * restriction rather than a bug on our side.
+ *
+ * One attempt. If it does not land, postUnreachableNudge asks them publicly to
+ * DM the keyword, which opens a thread from their side — the only route left.
  */
-const MAX_DM_ATTEMPTS = Number(process.env.COMMENT_POLL_MAX_DM_ATTEMPTS ?? 5);
+const MAX_DM_ATTEMPTS = Number(process.env.COMMENT_POLL_MAX_DM_ATTEMPTS ?? 1);
 // For "any post" campaigns, how many recent posts to scan.
 const RECENT_MEDIA_LIMIT = 10;
 

@@ -52,12 +52,16 @@ const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
 // their links, so every reveal-side query filters to REVEAL_LINK and the
 // follow-up to FOLLOWUP_LINK. Without this the follow-up's link would show up
 // as a third button on the reveal message.
-// Give Instagram the sweep's full retry budget before telling the commenter
-// it will not work, so a recipient who becomes reachable is never nudged.
-const UNREACHABLE_NUDGE_AFTER_ATTEMPTS = 5;
-
 const REVEAL_LINK = "REVEAL";
 const FOLLOWUP_LINK = "FOLLOWUP";
+
+// One attempt, then tell them. This used to wait for five, on the theory that a
+// recipient who becomes reachable should never be nudged — but there is no
+// "becomes reachable" for a private reply. Instagram allows one per comment,
+// so after the first attempt the outcome is already decided and waiting only
+// spends four more failing calls and twenty-five minutes of the commenter's
+// interest. See MAX_DM_ATTEMPTS in lib/polling/comment-reconciler.ts.
+const UNREACHABLE_NUDGE_AFTER_ATTEMPTS = 1;
 
 function formatError(error: unknown): string {
   if (error instanceof MetaApiError) {
@@ -719,24 +723,53 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         },
       });
 
-      // Instagram refused to open the conversation. Do not burn this job's
-      // three fast retries on it: the private-reply window stays open for 7
-      // days, and the 5-minute reconciler sweep will re-attempt on a far
-      // gentler cadence, bounded by MAX_DM_ATTEMPTS.
-      if (error instanceof RecipientUnavailableError) {
+      // Two different kinds of failure hide behind one catch, and they need
+      // opposite handling.
+      //
+      // BLOCKED BEFORE SENDING — a rate limit, an action block, a dead token.
+      // Meta never processed the message, so the comment's one private reply is
+      // NOT spent and a later attempt is still worth making. These re-throw, so
+      // the job fails, BullMQ backs off, and the 368 handler can put the whole
+      // account into cooldown. Swallowing these would quietly disable the
+      // account-safety path that exists to stop an action block getting worse.
+      if (
+        error instanceof RateLimitError ||
+        error instanceof TokenExpiredError ||
+        (error instanceof MetaApiError && (error.code === 4 || error.code === 17 || error.code === 368))
+      ) {
+        throw error;
+      }
+
+      // DECIDED — Meta processed it and the one private reply is gone, whatever
+      // it says happened. There is no second attempt to plan for, so all that
+      // is left is whether to tell the commenter.
+      //
+      // Code 1 is the exception, and it is the common case: Meta returns "An
+      // unknown error has occurred" on sends that DID land. Nudging those
+      // people would tell somebody already holding the message that we could
+      // not send it. When we cannot tell, we say nothing.
+      //
+      // Everything else — no thread, bad scope, stale comment id, closed window
+      // — means nothing arrived, and the public nudge is the only route left:
+      // an inbound DM opens the thread a private reply could not, and this
+      // campaign already answers inbound DMs on the same keyword.
+      if (error instanceof MetaApiError && error.code === 1) {
         console.log(
-          `[DM Worker] ${commentId}: Instagram would not open a thread; leaving it to the sweep`
+          `[DM Worker] ${commentId}: Meta returned code 1, which it also returns on delivered sends. Not retrying, not nudging.`
         );
-        await postUnreachableNudge({
-          automation,
-          commentId,
-          accessToken,
-          instagramAccountId,
-        });
         continue;
       }
 
-      throw error;
+      console.log(
+        `[DM Worker] ${commentId}: private reply did not land (${formatError(error)}); nudging publicly`
+      );
+      await postUnreachableNudge({
+        automation,
+        commentId,
+        accessToken,
+        instagramAccountId,
+      });
+      continue;
     }
   }
 }
@@ -750,8 +783,8 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
  * private reply could not, and this campaign already answers inbound DMs on the
  * same keyword, so pointing them at that recovers the whole flow.
  *
- * Posted only once the sweep has exhausted its retries, so Instagram gets every
- * chance to relent first, and only once per comment.
+ * Posted after the single private-reply attempt, because there is no second
+ * one to wait for, and only once per comment.
  */
 async function postUnreachableNudge(args: {
   automation: {

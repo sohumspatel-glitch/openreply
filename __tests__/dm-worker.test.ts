@@ -509,13 +509,16 @@ describe("DM Worker — Full Pipeline", () => {
     expect(mockSendPrivateReply).not.toHaveBeenCalled();
   });
 
-  it("should log FAILED, release usage, and re-throw when private reply sending fails", async () => {
+  it("should log FAILED and release usage when private reply sending fails", async () => {
     const error = new Error("API Error");
     mockSendPrivateReply.mockRejectedValue(error);
 
     const processor = getProcessor();
 
-    await expect(processor(createMockJob())).rejects.toThrow("API Error");
+    // No longer re-throws. Instagram allows one private reply per comment and
+    // this attempt spent it, so failing the job would only buy a retry that
+    // cannot succeed. It records the failure and moves on.
+    await expect(processor(createMockJob())).resolves.toBeUndefined();
     expect(mockReleaseWorkspaceDMReservation).toHaveBeenCalledWith(
       "workspace_123",
       usagePeriodStart
@@ -931,9 +934,7 @@ describe("DM Worker — one private reply per comment", () => {
     );
 
     const processor = getProcessor();
-    await expect(processor(createMockJob())).rejects.toThrow(
-      "The comment is invalid for a private reply"
-    );
+    await expect(processor(createMockJob())).resolves.toBeUndefined();
 
     // A text retry on the same comment would fail identically and overwrite the
     // real reason, so it must not be attempted.
@@ -1197,7 +1198,7 @@ describe("DM Worker — Instagram action blocks (error 368)", () => {
     mockSendPrivateReply.mockRejectedValue(new Error("network blip"));
     const processor = getProcessor();
 
-    await expect(processor(createMockJob())).rejects.toThrow();
+    await processor(createMockJob());
     expect(mockStartSendCooldown).not.toHaveBeenCalled();
   });
 
@@ -1241,12 +1242,24 @@ describe("DM Worker — recipients who cannot be messaged", () => {
     expect(mockStartSendCooldown).not.toHaveBeenCalled();
   });
 
-  it("still retries an ordinary permission error", async () => {
+  it("does not retry a permission error, because the one private reply is gone", async () => {
     const meta = await import("@/lib/meta/client");
     mockSendCooldownRemaining.mockResolvedValue(0);
     mockSendPrivateReply.mockRejectedValue(
       new meta.PermissionError("Insufficient permission")
     );
+    const processor = getProcessor();
+
+    await expect(processor(createMockJob())).resolves.toBeUndefined();
+  });
+
+  it("still throws on a rate limit, so the account can back off", async () => {
+    // The other half of the split: Meta never processed this send, so the
+    // private reply is NOT spent and a later attempt is still worth making.
+    // These must keep failing the job, or the 368 cooldown never runs.
+    const meta = await import("@/lib/meta/client");
+    mockSendCooldownRemaining.mockResolvedValue(0);
+    mockSendPrivateReply.mockRejectedValue(new meta.RateLimitError("slow down"));
     const processor = getProcessor();
 
     await expect(processor(createMockJob())).rejects.toThrow();
@@ -1294,16 +1307,19 @@ describe("DM Worker — the commenter we could not reach", () => {
     expect(String(nudges[0][2])).toContain("LINK");
   });
 
-  it("stays quiet while retries remain", async () => {
+  it("nudges after the single attempt, because there is no second one", async () => {
+    // This used to assert silence while retries remained. There are no retries
+    // now: the comment's one private reply is spent on the first attempt, so
+    // waiting only costs the commenter twenty-five minutes of interest.
     mockPrisma.dmLog.findUnique.mockResolvedValue({
-      attempts: 2,
+      attempts: 1,
       fallbackReplySentAt: null,
     });
 
     await getProcessor()(createMockJob());
 
     const m = await meta();
-    expect(nudgesFrom(vi.mocked(m.sendCommentReply).mock.calls)).toHaveLength(0);
+    expect(nudgesFrom(vi.mocked(m.sendCommentReply).mock.calls)).toHaveLength(1);
   });
 
   it("never posts the nudge twice under one comment", async () => {

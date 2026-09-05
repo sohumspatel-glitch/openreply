@@ -53,11 +53,30 @@ describe("shouldAct — a failed DM is not 'handled'", () => {
   const sent = { status: "SENT", publicReplySentAt: new Date(), attempts: 1 };
   const dmFailed = { status: "FAILED", publicReplySentAt: new Date(), attempts: 1 };
 
-  it("retries when the public reply posted but the DM did not", () => {
-    // The exact regression: the reply is posted BEFORE the DM, so treating it
-    // as completion marked every failed DM as done forever.
+  it("does not re-attempt a DM that already used the comment's one private reply", () => {
+    // This used to expect true, on the reasoning that a posted public reply
+    // must not mask a failed DM. That half is still right — but the fix was
+    // wrong. Instagram allows ONE private reply per comment, and the first
+    // attempt spends it however it turns out. Re-attempting cannot succeed; it
+    // returns subcode 2534001, which reads like "this person is unreachable"
+    // and actually means "you already used your shot".
+    //
+    // Measured 2026-09-05: of 107 delivered DMs, 95 landed on attempt one, and
+    // not one 2534001 refusal was ever a first attempt.
     expect(
       shouldAct({ ownerReplied: true, publicReplyEnabled: true, log: dmFailed })
+    ).toBe(false);
+  });
+
+  it("still acts on a comment nothing has been attempted for", () => {
+    // The guard the original regression was about: a public reply we posted
+    // ourselves must never be mistaken for delivery.
+    expect(
+      shouldAct({
+        ownerReplied: true,
+        publicReplyEnabled: true,
+        log: { ...dmFailed, attempts: 0 },
+      })
     ).toBe(true);
   });
 
