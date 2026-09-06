@@ -90,7 +90,14 @@
   --color-glass: rgba(255, 255, 255, 0.72);
   --color-glass-strong: rgba(255, 255, 255, 0.86);
   --color-glass-rim: rgba(255, 255, 255, 0.6);
-  --color-glass-ink: rgba(17, 20, 24, 0.72);
+  /* 0.9, not the 0.72 this started at. The on-ink text tokens above are
+     measured against SOLID --color-ink and their comments claim those ratios,
+     but the rail composites the scrim over a near-white canvas: at 0.72 the
+     panel resolved to #535557 and on-ink-mute -- the workspace name and the
+     SELF-HOSTED label -- fell to 2.89:1. At 0.9 the panel is #282b2e and the
+     tokens deliver roughly what they advertise. Still translucent, still
+     blurred and saturated; just dark enough to be the surface it claims. */
+  --color-glass-ink: rgba(17, 20, 24, 0.9);
   --color-glass-ink-strong: rgba(17, 20, 24, 0.86);
   --blur-glass: 18px;
 
@@ -237,6 +244,44 @@
   /* Deprecated aliases, kept in step with their replacements. */
   --color-surface-hover: #221f1b;
   --color-border-hover: #453e35;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   The one place the flip does NOT apply.
+
+   `ink` flips for dark mode because its role is "maximum contrast block" — a
+   primary button has to become a light block on a dark canvas or it vanishes
+   (note 2 above). But `.glass-ink` has a different role: it is a translucent
+   DARK scrim in BOTH themes — the sidebar rail and the mobile overlay. Its
+   background stays dark while `--color-on-ink` flipped to near-black
+   underneath it, so the sidebar rendered near-black text on a near-black
+   panel. Every label except the active one was effectively invisible.
+
+   Correcting the variables on the element rather than rewriting the sidebar's
+   classes means every descendant inherits the fix for free, and the sidebar
+   markup keeps saying what it means.
+
+   These are the dark palette's warm neutrals rather than the light palette's
+   cool ones, because this scrim is warm — rgba(10, 9, 8, …), not
+   rgba(17, 20, 24, …). Ratios are measured against the composited scrim in
+   __tests__/sidebar-contrast.test.ts.
+   ────────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .glass-ink,
+[data-theme="dark"] .glass-ink-strong {
+  --color-on-ink: #f4f0ea;
+  --color-on-ink-soft: #cec7bd;
+  --color-on-ink-mute: #a49b8f;
+  /* Lifts, not drops: on a dark panel the raised/hover states must be lighter
+     than the panel, the reverse of what they are in the light palette. */
+  --color-ink-raised: #2b2721;
+  --color-ink-hover: #221f1b;
+  --color-border-invert: #302b25;
+  /* tan deepens in the dark palette because it sits on the now-light ink.
+     Inside the scrim ink is dark again, so tan returns to its light-mode
+     value. */
+  --color-tan: #d4a574;
+
+  color: var(--color-on-ink);
 }
 
 @layer base {
