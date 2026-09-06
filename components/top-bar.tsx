@@ -48,10 +48,22 @@ export default function TopBar({
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
         <button
           onClick={onMenuClick}
-          className="lg:hidden shrink-0 px-2.5 py-1.5 rounded-btn border border-border-firm text-sm text-muted hover:text-foreground"
+          className="lg:hidden inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-btn border border-border-firm text-muted hover:text-foreground"
           aria-label="Toggle sidebar"
         >
-          Menu
+          {/* Same stroke weight and size as the tab bar icons, so the two
+              pieces of mobile chrome read as one set. */}
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            className="h-[18px] w-[18px]"
+            aria-hidden="true"
+          >
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
         </button>
         <h1 className="truncate text-base font-semibold sm:text-lg">{title}</h1>
       </div>
