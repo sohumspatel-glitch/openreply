@@ -59,7 +59,10 @@ export default function TopBar({
       <div className="flex shrink-0 items-center gap-3">
         <ThemeToggle />
         {instagramAccountCount > 0 ? (
-        <p className="shrink-0 truncate text-sm text-muted">
+        // The handle is shrink-0, so at 390px it pushed the page title down to
+        // "Da…". It is already the first thing in the sidebar, so on a phone
+        // the header gives its room to the title instead.
+        <p className="hidden shrink-0 truncate text-sm text-muted sm:block">
           {instagramAccountCount > 1
             ? `${instagramAccountCount} accounts`
             : `@${instagramUsername}`}
