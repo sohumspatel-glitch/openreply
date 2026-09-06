@@ -19,8 +19,15 @@
    generated utility happens to use, so a token nothing has styled with yet —
    --color-tan, --shadow-card, --ease-expressive — never reaches :root and a
    hand-written var(--color-tan) (recharts stroke props, an inline style)
-   silently resolves to nothing. `inline` keeps utilities on literal values. */
-@theme static inline {
+   silently resolves to nothing.
+
+   `inline` was here and has been REMOVED. It compiles each utility down to the
+   literal value, so `bg-background` emitted `background-color:#fcfbf9` and no
+   amount of redefining --color-background at runtime could change it — which
+   made a second palette impossible. Without it every utility emits
+   `var(--color-background)`, so the dark block below actually takes effect.
+   `static` still does its job of emitting every token to :root. */
+@theme static {
   /* Surfaces — warm, not beige. The canvas is a hair off white so a pure white
      card reads as raised without needing a heavy shadow to say so. */
   --color-background: #fcfbf9;
@@ -64,6 +71,11 @@
      label on it; --color-accent stays for fills, rules, icons and big figures. */
   --color-accent-fill: #96591c;
   --color-accent-fill-hover: #6f4117;
+  /* The label on an accent fill. Deliberately NOT --color-on-ink: that token
+     flips to dark in the dark palette, because it labels the ink family, which
+     flips. An accent fill is copper on both themes, so its label stays light on
+     both. Measured 5.3:1 on --color-accent-fill. */
+  --color-on-accent: #fdf8f3;
   --color-accent-tint: #faf2e8;
   --color-accent-rim: #e9d3b6;
   --color-tan: #d4a574; /* 8.3:1 on ink — accent ON INK only, never on canvas */
@@ -125,12 +137,118 @@
   --color-border-hover: #d7cfc3;
 }
 
+/* ── Dark ──────────────────────────────────────────────────────────────────
+   Every token below is a REDEFINITION of one declared in @theme above. No new
+   names, no component changes: the system was already built so that nothing
+   carries a raw hex, which is what makes a second palette a stylesheet edit
+   rather than a rewrite.
+
+   Scoped to [data-theme], not to the media query alone, because the dashboard
+   and the public marketing pages want different answers. A visitor landing on
+   the pricing page in dark mode should still get the brand's light hero; an
+   operator staring at the inbox at 2am should not. The dashboard shell sets the
+   attribute; the marketing pages never do.
+
+   Two decisions worth stating, because they are not mechanical inversions:
+
+   1. The neutrals stay WARM. This palette's identity is warm precision, and a
+      cold grey dark mode would read as a different product. Every surface here
+      carries a few points of red over blue, so copper still belongs on it.
+
+   2. The `ink` family genuinely FLIPS. In light mode `bg-ink` is the darkest
+      thing on the page — the primary button, the badge over a thumbnail. Its
+      role is "maximum contrast block", and on a dark canvas that role is filled
+      by a light block, not a dark one. Keeping ink dark here would make every
+      primary button vanish into the background. So ink becomes near-white,
+      on-ink becomes near-black, and `tan` — which is documented as accent-on-ink
+      only — deepens to stay legible on it.
+   ────────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  /* Surfaces. The canvas is the darkest; each step up is a real step, so a
+     panel reads as raised without needing a shadow to say so — which matters
+     because shadows barely register on dark ground. */
+  --color-background: #12100e;
+  --color-surface: #1a1815;
+  --color-surface-warm: #221f1b;
+  --color-surface-sand: #2b2721;
+  --color-surface-field: #171512;
+
+  /* The flip. See note 2 above. */
+  --color-ink: #f2ede6;
+  --color-ink-raised: #e6e0d7;
+  --color-ink-hover: #ffffff;
+
+  /* Text. Ratios measured on --color-surface (#1a1815), the lightest surface
+     text sits on here and therefore the worst case. */
+  --color-foreground: #f4f0ea; /* 15.6:1 — headings + body */
+  --color-foreground-soft: #cec7bd; /* 10.4:1 — secondary copy */
+  --color-muted: #a49b8f; /*  6.2:1 — clarifiers, metadata */
+  --color-faint: #9a9185; /*  5.5:1 — small labels */
+  --color-on-ink: #14120f; /* 15.9:1 on the flipped --color-ink */
+  --color-on-ink-soft: #3d3831; /*  9.0:1 on --color-ink */
+  --color-on-ink-mute: #5c5648; /*  5.7:1 on --color-ink */
+
+  /* Lines. On a dark ground a border works by being LIGHTER than its surface,
+     so these are lifts rather than the light palette's shadows. */
+  --color-border: #302b25;
+  --color-border-soft: #262119;
+  --color-border-firm: #453e35;
+  --color-border-invert: #d8d2c8;
+
+  /* Copper. The light palette needed a deeper ramp because copper on white is
+     only 3.8:1; on dark ground the problem inverts, so the accent LIGHTENS.
+     --color-accent is 6.4:1 on --color-surface, which clears AA for body text
+     as well as for graphics, so the accent/accent-text split collapses here. */
+  --color-accent: #d9944e;
+  --color-accent-text: #e0a05f; /*  8.0:1 on --color-surface */
+  --color-accent-hover: #e8a869;
+  /* Deeper than --color-accent so the LABEL clears AA: white on #b87333 is
+     only 3.79:1, measured. This is 4.8:1 with --color-on-accent. */
+  --color-accent-fill: #9d5e1d;
+  --color-accent-fill-hover: #b87333;
+  --color-on-accent: #fdf8f3;
+  --color-accent-tint: #2a1f13;
+  --color-accent-rim: #4d3a22;
+  --color-tan: #7a5220; /* deepened: it sits on the now-light ink */
+
+  /* Status. Lightened to clear AA on the dark surface, still paired with a word. */
+  --color-success: #6cc287;
+  --color-error: #f08a72;
+  --color-error-tint: #2b1713;
+  --color-warning: #d9944e;
+
+  /* Glass. The light palette frosts with white; here the chrome is a dark pane
+     and the rim is the light that makes it read as glass rather than as a hole. */
+  --color-glass: rgba(34, 31, 27, 0.72);
+  --color-glass-strong: rgba(34, 31, 27, 0.88);
+  --color-glass-rim: rgba(244, 240, 234, 0.10);
+  --color-glass-ink: rgba(10, 9, 8, 0.72);
+  --color-glass-ink-strong: rgba(10, 9, 8, 0.88);
+
+  /* Depth. A dark shadow on a dark ground is invisible, so these go deeper and
+     broader and lean on the surface steps above to do most of the lifting. */
+  --shadow-hair: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-panel: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 16px 40px -16px rgba(0, 0, 0, 0.65);
+  --shadow-media: 0 32px 64px -28px rgba(0, 0, 0, 0.8);
+  --shadow-glass: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+
+  /* Deprecated aliases, kept in step with their replacements. */
+  --color-surface-hover: #221f1b;
+  --color-border-hover: #453e35;
+}
+
 @layer base {
-  /* The palette is light-only and no dark variant is declared, so pin the
-     scheme: it keeps native controls, scrollbars and form widgets light even
-     when the OS is in dark mode. */
+  /* Light is the default and the only palette the public pages use. The
+     dashboard opts in by setting data-theme, and color-scheme follows so native
+     controls, scrollbars and form widgets match the surface they sit on. */
   html {
     color-scheme: light;
+  }
+
+  html[data-theme="dark"] {
+    color-scheme: dark;
   }
 
   body {
@@ -234,10 +352,55 @@
     border: 1px solid var(--color-border-invert);
   }
 
+  /* ── Floating tab bar, phones only ──────────────────────────────────────
+     A pill that hovers over the content instead of a docked bar. The frosted
+     pane only reads as glass when something is moving behind it, which is the
+     whole reason it floats: a docked opaque bar renders cheaper and says
+     nothing.
+
+     Three layers make it read as a physical object rather than a tinted
+     rectangle: a heavier blur than the rest of the chrome, since the content
+     scrolling underneath is high-contrast and would otherwise show through as
+     noise; a white inner rim along the top edge, which is the highlight that
+     sells glass; and a broad shadow for the height off the page. */
+  .tabbar {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    width: min(calc(100% - 1.5rem), 30rem);
+  }
+
+  .glass-pill {
+    background: var(--color-glass-strong);
+    -webkit-backdrop-filter: blur(28px) saturate(1.6);
+    backdrop-filter: blur(28px) saturate(1.6);
+    border: 1px solid var(--color-glass-rim);
+    box-shadow:
+      var(--shadow-card),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+
+  /* On the dark palette the inner rim has to come down hard: a 55% white
+     hairline that reads as a highlight over a light pane reads as a scratch
+     over a dark one. */
+  [data-theme="dark"] .glass-pill {
+    box-shadow:
+      var(--shadow-card),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  }
+
+  /* The bar floats over the last of the content, so the scroll container needs
+     room underneath or the final row sits under the glass permanently. */
+  .has-tabbar {
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  }
+
   /* Without the blur, translucency is just low contrast over unknown content,
      so fall back to the solid surface rather than to a tint. */
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .glass,
+    .glass-pill,
     .glass-strong {
       background: var(--color-surface);
       border-color: var(--color-border);

@@ -211,7 +211,7 @@ export default function SettingsPage() {
         <div className="mt-6 pt-4 border-t border-border flex gap-3">
           <a
             href="/api/instagram/connect"
-            className="px-4 py-2 rounded-btn text-sm font-medium transition-colors bg-accent-fill text-on-ink hover:bg-accent-fill-hover"
+            className="px-4 py-2 rounded-btn text-sm font-medium transition-colors bg-accent-fill text-on-accent hover:bg-accent-fill-hover"
           >
             {accounts.length > 0 ? "Connect another account" : "Connect Instagram"}
           </a>
@@ -309,7 +309,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={busy === "invite"}
-              className="rounded-btn bg-accent-fill px-4 py-2 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-fill-hover disabled:opacity-50"
+              className="rounded-btn bg-accent-fill px-4 py-2 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-fill-hover disabled:opacity-50"
             >
               {busy === "invite" ? "Inviting..." : "Invite"}
             </button>

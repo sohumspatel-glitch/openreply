@@ -655,7 +655,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             type="button"
             onClick={() => handleSubmit(mode === "new" ? true : isActive)}
             disabled={saving}
-            className="rounded-btn bg-accent-fill px-5 py-2 text-sm font-medium text-on-ink hover:bg-accent-fill-hover disabled:opacity-50"
+            className="rounded-btn bg-accent-fill px-5 py-2 text-sm font-medium text-on-accent hover:bg-accent-fill-hover disabled:opacity-50"
           >
             {saving ? "Saving…" : mode === "new" ? "Go Live" : "Save changes"}
           </button>

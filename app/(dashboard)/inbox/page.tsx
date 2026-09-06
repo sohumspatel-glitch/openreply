@@ -372,7 +372,7 @@ export default function InboxPage() {
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={sending || !draft.trim()}
-                    className="rounded-btn bg-accent-fill px-4 py-2 text-sm font-medium text-on-ink hover:bg-accent-fill-hover disabled:opacity-50"
+                    className="rounded-btn bg-accent-fill px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-fill-hover disabled:opacity-50"
                   >
                     {sending ? "Sending…" : "Send"}
                   </button>

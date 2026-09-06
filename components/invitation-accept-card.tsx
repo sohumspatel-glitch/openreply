@@ -37,7 +37,7 @@ export default function InvitationAcceptCard({
     return (
       <a
         href="/login"
-        className="inline-flex items-center justify-center rounded-btn bg-accent-fill px-5 py-3 text-sm font-semibold text-on-ink transition hover:bg-accent-fill-hover"
+        className="inline-flex items-center justify-center rounded-btn bg-accent-fill px-5 py-3 text-sm font-semibold text-on-accent transition hover:bg-accent-fill-hover"
       >
         Sign in to accept
       </a>
@@ -50,7 +50,7 @@ export default function InvitationAcceptCard({
         type="button"
         onClick={acceptInvite}
         disabled={busy}
-        className="inline-flex items-center justify-center rounded-btn bg-accent-fill px-5 py-3 text-sm font-semibold text-on-ink transition hover:bg-accent-fill-hover disabled:opacity-50"
+        className="inline-flex items-center justify-center rounded-btn bg-accent-fill px-5 py-3 text-sm font-semibold text-on-accent transition hover:bg-accent-fill-hover disabled:opacity-50"
       >
         {busy ? "Accepting..." : "Accept invitation"}
       </button>
