@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import type { SocialPlatform } from "@/app/generated/prisma/client";
+import { capabilitiesFor, platformForWebhookObject } from "@/lib/meta/platform";
 
 export function verifyWebhookSignature(
   payload: string,
@@ -33,6 +35,7 @@ export function verifyWebhookSignature(
 }
 
 export interface WebhookCommentEvent {
+  platform: SocialPlatform;
   instagramAccountId: string;
   commentId: string;
   commentText: string;
@@ -56,9 +59,19 @@ interface WebhookEntry {
       id?: string;
       comment_id?: string;
       text?: string;
+      // A Page's `feed` channel names the same things differently: the body
+      // is `message` rather than `text`, the commenter has a `name` rather
+      // than a `username`, and the post is `post_id` rather than `media`.
+      // `item` and `verb` say what kind of activity this is at all.
+      item?: string;
+      verb?: string;
+      message?: string;
+      post_id?: string;
+      parent_id?: string;
       from?: {
         id?: string;
         username?: string;
+        name?: string;
       };
       media?: {
         id?: string;
@@ -88,6 +101,7 @@ interface WebhookEntry {
 }
 
 export interface WebhookMessageEvent {
+  platform: SocialPlatform;
   instagramAccountId: string;
   messageId: string;
   messageText: string;
@@ -95,6 +109,7 @@ export interface WebhookMessageEvent {
 }
 
 export interface WebhookPostbackEvent {
+  platform: SocialPlatform;
   instagramAccountId: string;
   userId: string;
   payload: string;
@@ -102,6 +117,7 @@ export interface WebhookPostbackEvent {
 }
 
 export interface WebhookReadEvent {
+  platform: SocialPlatform;
   instagramAccountId: string;
   userId: string;
   watermark?: number;
@@ -115,22 +131,43 @@ interface WebhookPayload {
 export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent[] {
   const events: WebhookCommentEvent[] = [];
 
-  if (payload.object !== "instagram") {
-    return events;
-  }
+  const platform = platformForWebhookObject(payload.object);
+  if (!platform) return events;
+
+  const { commentField } = capabilitiesFor(platform);
+  const isPage = platform === "FACEBOOK";
 
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
-      if (change.field !== "comments") continue;
+      if (change.field !== commentField) continue;
 
       const value = change.value;
-      const commentId = value?.id ?? value?.comment_id;
-      const mediaId = value?.media?.id ?? value?.media_id;
+
+      // Instagram's `comments` field only ever carries a new comment. A
+      // Page's `feed` carries everything that happens on the Page -- posts,
+      // likes, shares, edits, deletions -- so the comment additions have to
+      // be picked out of it. Without the `verb` check an edited comment would
+      // re-trigger a campaign that already replied to it, and a deletion
+      // would trigger one that never did.
+      if (isPage) {
+        if (value?.item !== "comment") continue;
+        if (value?.verb && value.verb !== "add") continue;
+      }
+
+      const commentId = isPage
+        ? value?.comment_id
+        : (value?.id ?? value?.comment_id);
+      const mediaId = isPage
+        ? value?.post_id
+        : (value?.media?.id ?? value?.media_id);
       // A comment on a boosted post arrives with the ad's media id, while the
       // campaign is set up against the organic post. Keep both so the worker
       // can match either one.
-      const originalMediaId =
-        value?.media?.original_media_id === mediaId
+      // Boosted-post rewriting is Instagram-only: a Page ad comment arrives
+      // under the Page post's own id, so there is nothing to map back.
+      const originalMediaId = isPage
+        ? undefined
+        : value?.media?.original_media_id === mediaId
           ? undefined
           : value?.media?.original_media_id;
       const commenterId = value?.from?.id;
@@ -147,11 +184,15 @@ export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent
       }
 
       events.push({
+        platform,
         instagramAccountId: entry.id,
         commentId,
-        commentText: value.text ?? "",
+        // Instagram calls the body `text`, a Page calls it `message`.
+        commentText: value.text ?? value.message ?? "",
         commenterId,
-        commenterName: value.from?.username,
+        // Instagram has a handle; a Facebook commenter has only a display
+        // name. Both are shown to the operator, neither is addressed to.
+        commenterName: value.from?.username ?? value.from?.name,
         mediaId,
         originalMediaId,
       });
@@ -170,7 +211,8 @@ export function parsePostbackEvents(
 ): WebhookPostbackEvent[] {
   const events: WebhookPostbackEvent[] = [];
 
-  if (payload.object !== "instagram") return events;
+  const platform = platformForWebhookObject(payload.object);
+  if (!platform) return events;
 
   for (const entry of payload.entry ?? []) {
     for (const messaging of entry.messaging ?? []) {
@@ -183,6 +225,7 @@ export function parsePostbackEvents(
       if (userId === accountId) continue;
 
       events.push({
+        platform,
         instagramAccountId: accountId,
         userId,
         payload: postbackPayload,
@@ -209,7 +252,8 @@ export function parseMessageEvents(
 ): WebhookMessageEvent[] {
   const events: WebhookMessageEvent[] = [];
 
-  if (payload.object !== "instagram") return events;
+  const platform = platformForWebhookObject(payload.object);
+  if (!platform) return events;
 
   for (const entry of payload.entry ?? []) {
     for (const messaging of entry.messaging ?? []) {
@@ -229,6 +273,7 @@ export function parseMessageEvents(
       if (senderId === accountId) continue;
 
       events.push({
+        platform,
         instagramAccountId: accountId,
         messageId,
         messageText: text,
@@ -248,7 +293,8 @@ export function parseMessageEvents(
 export function parseReadEvents(payload: WebhookPayload): WebhookReadEvent[] {
   const events: WebhookReadEvent[] = [];
 
-  if (payload.object !== "instagram") return events;
+  const platform = platformForWebhookObject(payload.object);
+  if (!platform) return events;
 
   for (const entry of payload.entry ?? []) {
     for (const messaging of entry.messaging ?? []) {
@@ -261,6 +307,7 @@ export function parseReadEvents(payload: WebhookPayload): WebhookReadEvent[] {
       if (userId === accountId) continue;
 
       events.push({
+        platform,
         instagramAccountId: accountId,
         userId,
         watermark: messaging.read.watermark,

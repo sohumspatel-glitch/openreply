@@ -127,7 +127,9 @@ model WorkspaceInvitation {
 model InstagramAccount {
   id                String   @id @default(cuid())
   workspaceId       String
+  /// The Meta object id: an IGSID for Instagram, a Page id for Facebook.
   instagramId       String   @unique
+  platform          SocialPlatform @default(INSTAGRAM)
   username          String
   name              String?
   accessToken       String
@@ -367,6 +369,18 @@ model OperationalEvent {
   @@index([source])
   @@index([level])
   @@index([createdAt])
+}
+
+/// Which Meta surface an account lives on. Facebook Pages and Instagram
+/// professional accounts share this table because they share almost
+/// everything that matters here: an id in Meta's id space, a long-lived
+/// token, a webhook subscription, comments that can be privately replied to
+/// once within seven days, and the same Send API request shape. They differ
+/// in host, token provenance, and a handful of capabilities -- see
+/// lib/meta/platform.ts, which is the only place that difference lives.
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
 }
 
 enum WorkspaceRole {

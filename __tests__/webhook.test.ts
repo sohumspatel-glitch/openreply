@@ -90,6 +90,7 @@ describe("parseCommentEvents", () => {
     const events = parseCommentEvents(payload);
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual({
+      platform: "INSTAGRAM",
       instagramAccountId: "page_123",
       commentId: "comment_456",
       commentText: "I want the LINK!",
@@ -159,9 +160,9 @@ describe("parseCommentEvents", () => {
     expect(parseCommentEvents(payload)[0].originalMediaId).toBeUndefined();
   });
 
-  it("should ignore non-instagram objects", () => {
+  it("ignores an unrecognised webhook object", () => {
     const payload = {
-      object: "page",
+      object: "whatsapp_business_account",
       entry: [
         {
           id: "page_123",
@@ -370,6 +371,7 @@ describe("parseMessageEvents", () => {
 
     expect(parseMessageEvents(payload)).toEqual([
       {
+        platform: "INSTAGRAM",
         instagramAccountId: "ig_456",
         messageId: "mid_abc",
         messageText: "send me the LINK please",
@@ -445,10 +447,10 @@ describe("parseMessageEvents", () => {
     expect(parseMessageEvents(payload)).toHaveLength(0);
   });
 
-  it("should ignore non-instagram payloads", () => {
+  it("ignores an unrecognised webhook object", () => {
     expect(
       parseMessageEvents({
-        object: "page",
+        object: "whatsapp_business_account",
         entry: [
           {
             id: "ig_456",
@@ -487,6 +489,7 @@ describe("parseReadEvents", () => {
 
     expect(parseReadEvents(payload)).toEqual([
       {
+        platform: "INSTAGRAM",
         instagramAccountId: "ig_456",
         userId: "commenter_999",
         watermark: 1770000000000,
