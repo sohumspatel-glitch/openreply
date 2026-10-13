@@ -68,10 +68,19 @@ if (!account.accessToken) throw new Error("no connected Instagram account");
 console.log(`account @${account.username} (${brand})`);
 const media = await getUserMedia(decryptToken(account.accessToken), 25);
 
-const carousels = media.filter(
-  (m) => (m as { media_type?: string }).media_type === "CAROUSEL_ALBUM"
+// Every media type: carousels, Reels/videos and single images can all carry a
+// Comment "KEYWORD" call to action. A post that already has a campaign is
+// skipped, so a second campaign with the same keyword never lands on it.
+const taken = new Set(
+  (
+    await prisma.automation.findMany({
+      where: { instagramAccountId: account.id, postId: { not: null } },
+      select: { postId: true },
+    })
+  ).map((a) => a.postId)
 );
-console.log(`${carousels.length} carousels in the last ${media.length} media items`);
+const posts = media.filter((m) => !taken.has(m.id));
+console.log(`${posts.length} posts without a campaign in the last ${media.length} media items`);
 
 const pending = await prisma.automation.findMany({
   where: { pendingNextReel: true, postId: null, instagramAccountId: account.id },
@@ -80,7 +89,7 @@ const pending = await prisma.automation.findMany({
 console.log(`${pending.length} campaigns waiting for a post\n`);
 
 let bound = 0;
-for (const m of carousels) {
+for (const m of posts) {
   const caption = (m as { caption?: string }).caption ?? "";
   // The publisher refuses any caption that does not open this way, so the
   // keyword is always here when the post came from this pipeline.
@@ -88,10 +97,18 @@ for (const m of carousels) {
   if (!match) continue;
   const keyword = match[1].toLowerCase();
 
-  const campaign = pending.find((a) =>
+  const candidates = pending.filter((a) =>
     a.keywords.some((k) => k.toLowerCase() === keyword)
   );
-  if (!campaign) continue;
+  if (candidates.length === 0) continue;
+  // Two waiting campaigns share this keyword, so the keyword alone can't say
+  // which one belongs here. Leave it to bind-post.mts, which binds by id.
+  if (candidates.length > 1) {
+    console.log(`  "${keyword}" is shared by ${candidates.length} waiting campaigns, skipped (bind by id)`);
+    continue;
+  }
+  const campaign = candidates[0];
+  pending.splice(pending.indexOf(campaign), 1);
 
   const permalink = (m as { permalink?: string }).permalink ?? null;
   console.log(`  "${keyword}" -> ${campaign.name}`);
