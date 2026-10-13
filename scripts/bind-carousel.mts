@@ -1,7 +1,12 @@
 /**
  * Bind a pending campaign to the carousel that was just posted.
  *
- *   npx tsx scripts/bind-carousel.mts <automationId>
+ *   npx tsx scripts/bind-carousel.mts <automationId> [--account trysettr] [--brand settr]
+ *
+ * The account is always the campaign's own (never "the first account"), so a
+ * Settr campaign binds against @trysettr's media and a Startscalr one against
+ * @startscalr's. --account / --brand are optional guards: when given, the
+ * script refuses if the campaign is not on that handle or brand workspace.
  *
  * bind-next-reel.mts only looks at REELS, and a carousel comes back as
  * CAROUSEL_ALBUM, so it never sees one. This does the same job for an album:
@@ -20,20 +25,35 @@ for (const line of fs.readFileSync(path.join(root, ".env"), "utf8").split(/\r?\n
 }
 
 const automationId = process.argv[2];
-if (!automationId) {
-  console.error("usage: npx tsx scripts/bind-carousel.mts <automationId>");
+if (!automationId || automationId.startsWith("--")) {
+  console.error("usage: npx tsx scripts/bind-carousel.mts <automationId> [--account <handle>] [--brand <brand>]");
   process.exit(2);
 }
+const flag = (name: string) => {
+  const i = process.argv.indexOf(name);
+  return i === -1 ? null : process.argv[i + 1] ?? null;
+};
 
 const { prisma } = await import("../lib/db/client");
 const { decryptToken } = await import("../lib/meta/oauth");
 const { getUserMedia } = await import("../lib/meta/client");
+const { assertCampaignAccount } = await import("../lib/brand-accounts");
+const { resolveGuideBrand } = await import("../lib/guide-campaign-brands");
+
+const expectedBrand = flag("--brand") ? resolveGuideBrand(flag("--brand")) : null;
 
 const automation = await prisma.automation.findUnique({
   where: { id: automationId },
-  include: { instagramAccount: true },
+  include: { instagramAccount: { include: { workspace: { select: { name: true } } } } },
 });
 if (!automation) throw new Error(`no automation ${automationId}`);
+if (automation.instagramAccount) {
+  assertCampaignAccount(automation.instagramAccount, {
+    username: flag("--account"),
+    brand: expectedBrand,
+  });
+  console.error(`[bind] campaign is on @${automation.instagramAccount.username}`);
+}
 const token = automation.instagramAccount?.accessToken;
 if (!token) throw new Error("automation has no connected Instagram account");
 

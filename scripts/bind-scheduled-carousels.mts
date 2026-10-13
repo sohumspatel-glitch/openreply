@@ -1,7 +1,13 @@
 /**
  * Bind pending campaigns to carousels once they actually publish.
  *
- *   npx tsx scripts/bind-scheduled-carousels.mts [--apply]
+ *   npx tsx scripts/bind-scheduled-carousels.mts [--apply] [--brand settr] [--account trysettr]
+ *
+ * Works on ONE account at a time: the brand's account (default brand
+ * "startscalr", its oldest account, which is the account this always used),
+ * and only that account's pending campaigns. Matching every pending campaign
+ * in the database against one account's captions would let a Settr campaign
+ * bind to a Startscalr carousel that happens to share its keyword.
  *
  * A scheduled post has no media id until it goes live, so a campaign cannot be
  * bound at the time it is created. This closes that gap: it reads recent media,
@@ -37,8 +43,29 @@ const { prisma } = await import("../lib/db/client");
 const { decryptToken } = await import("../lib/meta/oauth");
 const { getUserMedia } = await import("../lib/meta/client");
 
-const account = await prisma.instagramAccount.findFirst();
-if (!account?.accessToken) throw new Error("no connected Instagram account");
+const { selectBrandAccount } = await import("../lib/brand-accounts");
+const { GUIDE_CAMPAIGN_PROFILES, resolveGuideBrand } = await import(
+  "../lib/guide-campaign-brands"
+);
+
+const flag = (name: string) => {
+  const i = process.argv.indexOf(name);
+  return i === -1 ? null : process.argv[i + 1] ?? null;
+};
+const brand = resolveGuideBrand(flag("--brand") ?? undefined);
+
+const accounts = await prisma.instagramAccount.findMany({
+  include: { workspace: { select: { name: true } } },
+  orderBy: { connectedAt: "asc" },
+});
+if (accounts.length === 0) throw new Error("no connected Instagram account");
+const account = selectBrandAccount(
+  accounts,
+  brand,
+  flag("--account") ?? GUIDE_CAMPAIGN_PROFILES[brand].defaultAccountUsername
+);
+if (!account.accessToken) throw new Error("no connected Instagram account");
+console.log(`account @${account.username} (${brand})`);
 const media = await getUserMedia(decryptToken(account.accessToken), 25);
 
 const carousels = media.filter(
@@ -47,7 +74,7 @@ const carousels = media.filter(
 console.log(`${carousels.length} carousels in the last ${media.length} media items`);
 
 const pending = await prisma.automation.findMany({
-  where: { pendingNextReel: true, postId: null },
+  where: { pendingNextReel: true, postId: null, instagramAccountId: account.id },
   select: { id: true, name: true, keywords: true },
 });
 console.log(`${pending.length} campaigns waiting for a post\n`);

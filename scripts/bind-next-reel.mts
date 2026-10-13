@@ -4,6 +4,12 @@
  *
  *   npx tsx scripts/bind-next-reel.mts <automationId> [--timeout-min 90] [--every 45]
  *   npx tsx scripts/bind-next-reel.mts <automationId> --once
+ *   npx tsx scripts/bind-next-reel.mts <automationId> --account trysettr --brand settr
+ *
+ * The account watched is always the campaign's own, never "the first
+ * account", so it is right for every brand. --account / --brand are optional
+ * guards: when given, the script refuses if the campaign is not on that handle
+ * or brand workspace.
  *
  * Instagram sends no webhook when a media is published, so this polls
  * /me/media. The daily Vercel cron does the same thing as a safety net, but at
@@ -30,6 +36,8 @@ for (const line of fs.readFileSync(path.join(root, ".env"), "utf8").split(/\r?\n
 const { prisma } = await import("../lib/db/client");
 const { getUserMedia } = await import("../lib/meta/client");
 const { decryptToken } = await import("../lib/meta/oauth");
+const { assertCampaignAccount } = await import("../lib/brand-accounts");
+const { resolveGuideBrand } = await import("../lib/guide-campaign-brands");
 
 const automationId = process.argv[2];
 if (!automationId) {
@@ -40,22 +48,30 @@ const arg = (flag: string, fallback: number) => {
   const i = process.argv.indexOf(flag);
   return i === -1 ? fallback : Number(process.argv[i + 1]) || fallback;
 };
+const flag = (name: string) => {
+  const i = process.argv.indexOf(name);
+  return i === -1 ? null : process.argv[i + 1] ?? null;
+};
 const once = process.argv.includes("--once");
 const everyMs = arg("--every", 45) * 1000;
 const deadline = Date.now() + arg("--timeout-min", 90) * 60_000;
 
 const automation = await prisma.automation.findUnique({
   where: { id: automationId },
-  include: { instagramAccount: true },
+  include: { instagramAccount: { include: { workspace: { select: { name: true } } } } },
 });
 if (!automation) throw new Error(`no campaign ${automationId}`);
+assertCampaignAccount(automation.instagramAccount, {
+  username: flag("--account"),
+  brand: flag("--brand") ? resolveGuideBrand(flag("--brand")) : null,
+});
 if (!automation.instagramAccount.accessToken) throw new Error("account has no token");
 
 const token = decryptToken(automation.instagramAccount.accessToken);
 const createdAt = automation.createdAt;
 console.error(
   `[bind] watching for a reel posted after ${createdAt.toISOString()} ` +
-    `for "${automation.name}"`
+    `for "${automation.name}" on @${automation.instagramAccount.username}`
 );
 
 async function findNewReel() {
