@@ -4,17 +4,24 @@ import { useState } from "react";
 import Sidebar from "@/components/sidebar";
 import TopBar from "@/components/top-bar";
 import MobileTabBar from "@/components/mobile-tab-bar";
+import type { BrandKey } from "@/lib/branding";
 
 interface DashboardShellProps {
   children: React.ReactNode;
+  workspaceId: string;
   workspaceName: string;
+  brandKey: BrandKey;
+  workspaces: Array<{ id: string; name: string }>;
   instagramUsername: string | null;
   instagramAccountCount: number;
 }
 
 export default function DashboardShell({
   children,
+  workspaceId,
   workspaceName,
+  brandKey,
+  workspaces,
   instagramUsername,
   instagramAccountCount,
 }: DashboardShellProps) {
@@ -27,7 +34,10 @@ export default function DashboardShell({
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        workspaceId={workspaceId}
         workspaceName={workspaceName}
+        brandKey={brandKey}
+        workspaces={workspaces}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

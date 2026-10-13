@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import DashboardShell from "@/components/dashboard-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
-import { ensureWorkspaceForUser } from "@/lib/workspace";
+import { readActiveWorkspaceId } from "@/lib/active-workspace";
+import { brandKeyForWorkspaceName } from "@/lib/branding";
+import { ensureWorkspaceForUser, listWorkspacesForUser } from "@/lib/workspace";
 
 export default async function DashboardLayout({
   children,
@@ -17,17 +19,24 @@ export default async function DashboardLayout({
 
   const workspace = await ensureWorkspaceForUser(
     session.user.id,
-    session.user.email
+    session.user.email,
+    await readActiveWorkspaceId()
   );
-  const accounts = await prisma.instagramAccount.findMany({
-    where: { workspaceId: workspace.id },
-    orderBy: { connectedAt: "desc" },
-    select: { username: true },
-  });
+  const [accounts, workspaces] = await Promise.all([
+    prisma.instagramAccount.findMany({
+      where: { workspaceId: workspace.id },
+      orderBy: { connectedAt: "desc" },
+      select: { username: true },
+    }),
+    listWorkspacesForUser(session.user.id),
+  ]);
 
   return (
     <DashboardShell
+      workspaceId={workspace.id}
       workspaceName={workspace.name}
+      brandKey={brandKeyForWorkspaceName(workspace.name)}
+      workspaces={workspaces.map(({ id, name }) => ({ id, name }))}
       instagramUsername={accounts[0]?.username ?? null}
       instagramAccountCount={accounts.length}
     >

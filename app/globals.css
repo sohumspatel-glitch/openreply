@@ -284,6 +284,18 @@
   color: var(--color-on-ink);
 }
 
+/* Per-workspace brand accent on the rail (lib/branding.ts). The sidebar sets
+   data-brand only for a brand that has its own accent, so the default
+   Startscalr rail never matches this. Scoped to the rail: it recolours the
+   active nav label (text-tan) and its indicator (bg-accent), nothing else in
+   the UI. Emerald on the active pill is measured in both themes in
+   __tests__/sidebar-contrast.test.ts. Declared after the dark override above
+   so it wins at equal specificity. */
+.glass-ink[data-brand="settr"] {
+  --color-tan: #34d39a;
+  --color-accent: #34d39a;
+}
+
 @layer base {
   /* Light is the default and the only palette the public pages use. The
      dashboard opts in by setting data-theme, and color-scheme follows so native

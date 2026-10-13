@@ -152,3 +152,25 @@ describe("sidebar contrast in light mode", () => {
     expect(luminance(panel)).toBeLessThan(0.04);
   });
 });
+
+describe("Settr brand accent on the rail", () => {
+  // A Settr workspace recolours the active nav label and its indicator to
+  // emerald. The pill it sits on differs per theme, so check both.
+  const emerald = hex(tokenIn('.glass-ink[data-brand="settr"] {', "--color-tan"));
+  const lightPill = hex(tokenIn("@theme static {", "--color-ink-raised"));
+  const darkPill = hex(tokenIn('[data-theme="dark"] .glass-ink,', "--color-ink-raised"));
+
+  it("uses the same emerald for the label and the indicator", () => {
+    expect(tokenIn('.glass-ink[data-brand="settr"] {', "--color-accent")).toBe(
+      tokenIn('.glass-ink[data-brand="settr"] {', "--color-tan")
+    );
+  });
+
+  it("passes AA for the active label in light mode", () => {
+    expect(ratio(emerald, lightPill)).toBeGreaterThanOrEqual(AA_BODY);
+  });
+
+  it("passes AA for the active label in dark mode", () => {
+    expect(ratio(emerald, darkPill)).toBeGreaterThanOrEqual(AA_BODY);
+  });
+});
