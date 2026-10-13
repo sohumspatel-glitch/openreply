@@ -292,11 +292,12 @@ describe("guide campaign brand profiles", () => {
     settr.followUp!.buttonLabel,
   ];
 
-  it("keeps Settr copy free of dashes, emoji and exclamation marks", () => {
+  it("keeps Settr copy free of dashes and emoji, with exclamation marks only on a greeting", () => {
     for (const text of settrStrings) {
       expect(text, text).not.toMatch(/[—–]/);
       expect(text, text).not.toMatch(/\s-\s/);
-      expect(text, text).not.toMatch(/!/);
+      expect(text.replace(/\bHey!/g, ""), text).not.toMatch(/!/);
+      expect(text, text).not.toMatch(/you guys|all of you|\{username\}/i);
       expect(text, text).not.toMatch(/\p{Extended_Pictographic}/u);
     }
     expect(settr.publicReplies).toHaveLength(5);

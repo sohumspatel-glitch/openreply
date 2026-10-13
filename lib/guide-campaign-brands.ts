@@ -88,30 +88,32 @@ export const GUIDE_CAMPAIGN_PROFILES: Record<BrandKey, GuideCampaignProfile> = {
     },
   },
 
-  // Settr voice: sharp, calm, no emoji, no exclamation marks, and no dashes of
-  // any kind (em, en, or a spaced hyphen standing in for one). The test suite
-  // enforces all of that on every string below.
+  // Settr voice = Sohum texting one business contact: casual, warm, direct, a
+  // friendly founder. Talk to one person ("you", never "you guys"), "…" as the
+  // soft pause, no dashes of any kind, no emoji, no slang, exclamation marks
+  // only on a greeting ("Hey!"). An Instagram username is not a first name, so
+  // no {username} greeting. The test suite enforces all of that.
   settr: {
     brand: "settr",
     defaultAccountUsername: "trysettr",
     followPromptMessage:
-      "Hey {username}, it's yours. Follow @trysettr first so you see the next one, then tap below and I'll send it over.",
+      "Hey! It's yours… just follow @trysettr first so you catch the next one, then tap below and I'll send it right over.",
     followPromptButtonLabel: "I'm following",
     linkButtonLabel: "Open the guide",
     publicReplies: [
-      "Sent. Check your DMs.",
-      "It's in your DMs now.",
-      "Just sent it over. Check your inbox.",
-      "Done. Look in your DMs.",
-      "On its way to your DMs.",
+      "Just sent it to your DMs… let me know if it came through.",
+      "Sent it over… have a look in your DMs.",
+      "It's in your DMs now… let me know if you got it.",
+      "Just DM'd you… tell me if it didn't land.",
+      "Sent… check your DMs when you get a sec.",
     ],
-    revealDm: (guideTopic) => `Here's the guide on ${guideTopic}. {link}`,
+    revealDm: (guideTopic) => `Here you go… the guide on ${guideTopic}. {link}`,
     followUp: {
       delayMinutes: 240,
       message:
-        "One more thing, {username}. If you want this running on your own lead flow, book a call and we'll map it to the tools you already use.",
+        "Hey! Did you get a chance to look through it? If you want this running on your own calls and DMs, I'd love to show you how it would look. What day works for a quick call?",
       cardTitle: "Want this built around your tools?",
-      cardSubtitle: "Book a call. We'll map it to your stack.",
+      cardSubtitle: "Quick call… I'll show you how it would look for your business.",
       buttonLabel: "Book a call",
       url: SETTR_BOOK_A_CALL,
       imageUrl: null,
