@@ -29,7 +29,8 @@ const [mode = "dms", arg] = process.argv.slice(2);
 try {
   if (mode === "dms") await dms();
   else if (mode === "ig") await ig(arg);
-  else console.log("usage: settr-insights.mts dms | ig [count|url|mediaId]");
+  else if (mode === "find") await find(arg);
+  else console.log("usage: settr-insights.mts dms | ig [count|url|mediaId] | find <caption start>");
 } finally {
   await prisma.$disconnect();
 }
@@ -58,6 +59,21 @@ async function dms() {
     );
   }
   console.log(lines.join("\n"));
+}
+
+/** Prints the permalink of @trysettr's recent post whose caption starts like `text`, or nothing. */
+async function find(text?: string) {
+  if (!text) return;
+  const account = await prisma.instagramAccount.findFirst({ where: { username: USERNAME } });
+  if (!account) return;
+  const token = decryptToken(account.accessToken);
+  const base = `https://graph.instagram.com/${getMetaGraphApiVersion()}`;
+  const res = await fetch(`${base}/me/media?fields=caption,permalink,timestamp&limit=25&access_token=${encodeURIComponent(token)}`);
+  if (!res.ok) return;
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 40);
+  const want = norm(text);
+  const hit = ((await res.json()).data as { caption?: string; permalink?: string }[] | undefined)?.find((m) => norm(m.caption || "") === want);
+  if (hit?.permalink) console.log(hit.permalink);
 }
 
 async function ig(target?: string) {
