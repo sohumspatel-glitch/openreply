@@ -45,6 +45,15 @@ interface WorkspaceMembersData {
   }>;
 }
 
+interface WorkspacesData {
+  workspaces: Array<{
+    id: string;
+    name: string;
+    role: "OWNER" | "ADMIN" | "MEMBER";
+  }>;
+  activeWorkspaceId: string | null;
+}
+
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null);
   const [membersData, setMembersData] = useState<WorkspaceMembersData | null>(
@@ -55,15 +64,24 @@ export default function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "MEMBER">("MEMBER");
   const [memberError, setMemberError] = useState<string | null>(null);
+  const [workspacesData, setWorkspacesData] = useState<WorkspacesData | null>(
+    null
+  );
+  const [newWorkspaceName, setNewWorkspaceName] = useState("");
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/dashboard/stats").then((res) => res.json()),
       fetch("/api/workspace/members").then((res) => res.json()),
+      fetch("/api/workspace")
+        .then((res) => res.json())
+        .catch(() => null),
     ])
-      .then(([statsPayload, membersPayload]) => {
+      .then(([statsPayload, membersPayload, workspacesPayload]) => {
         if (statsPayload.success) setData(statsPayload.data);
         if (membersPayload.success) setMembersData(membersPayload.data);
+        if (workspacesPayload?.success) setWorkspacesData(workspacesPayload.data);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -104,6 +122,52 @@ export default function SettingsPage() {
     } else {
       setMemberError(payload.error ?? "Could not invite member");
     }
+    setBusy(null);
+  }
+
+  // Switching or creating reloads the whole dashboard: every page, the
+  // sidebar brand and the tab-session caches belong to one workspace.
+  function reloadIntoWorkspace() {
+    try {
+      window.sessionStorage.clear();
+    } catch {
+      // Storage unavailable: nothing cached to clear.
+    }
+    window.location.assign("/dashboard");
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    setWorkspaceError(null);
+    setBusy(`workspace:${workspaceId}`);
+    const res = await fetch("/api/workspace/active", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (payload?.success) {
+      reloadIntoWorkspace();
+      return;
+    }
+    setWorkspaceError(payload?.error ?? "Could not switch workspace");
+    setBusy(null);
+  }
+
+  async function createWorkspace(event: React.FormEvent) {
+    event.preventDefault();
+    setWorkspaceError(null);
+    setBusy("workspace:create");
+    const res = await fetch("/api/workspace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newWorkspaceName }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (payload?.success) {
+      reloadIntoWorkspace();
+      return;
+    }
+    setWorkspaceError(payload?.error ?? "Could not create workspace");
     setBusy(null);
   }
 
@@ -335,6 +399,71 @@ export default function SettingsPage() {
             {data?.workspace.dmsSentThisPeriod ?? 0}
           </span>
         </div>
+      </section>
+
+      <section id="workspaces" className="panel p-4 sm:p-6">
+        <h2 className="text-base font-semibold mb-2">Workspaces</h2>
+        <p className="mb-6 text-xs text-muted">
+          Each workspace has its own Instagram accounts, campaigns and logs.
+          Connecting Instagram attaches the account to the active workspace.
+        </p>
+
+        <div className="space-y-3">
+          {workspacesData?.workspaces.map((workspace) => {
+            const isActive = workspace.id === workspacesData.activeWorkspaceId;
+            return (
+              <div
+                key={workspace.id}
+                className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {workspace.name}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {workspace.role}
+                    {isActive ? " · Active" : ""}
+                  </p>
+                </div>
+                {!isActive && (
+                  <button
+                    type="button"
+                    onClick={() => switchWorkspace(workspace.id)}
+                    disabled={busy !== null}
+                    className="rounded-btn border border-border-firm px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:opacity-50"
+                  >
+                    {busy === `workspace:${workspace.id}` ? "Switching..." : "Switch"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <form
+          onSubmit={createWorkspace}
+          className="mt-6 grid gap-3 border-t border-border pt-4 sm:grid-cols-[1fr_auto]"
+        >
+          <input
+            type="text"
+            value={newWorkspaceName}
+            onChange={(event) => setNewWorkspaceName(event.target.value)}
+            placeholder="New workspace name"
+            maxLength={60}
+            className="rounded-control border border-border-firm bg-surface-field px-4 py-2 text-sm text-foreground transition-colors focus:border-accent"
+            required
+          />
+          <button
+            type="submit"
+            disabled={busy === "workspace:create"}
+            className="rounded-btn bg-accent-fill px-4 py-2 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-fill-hover disabled:opacity-50"
+          >
+            {busy === "workspace:create" ? "Creating..." : "Create workspace"}
+          </button>
+          {workspaceError && (
+            <p className="sm:col-span-2 text-sm text-error">{workspaceError}</p>
+          )}
+        </form>
       </section>
     </div>
   );
